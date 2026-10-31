@@ -1,0 +1,16 @@
+[Unit]
+Description=RightType (Linux port) — tray icon and settings window
+Documentation=file:%h/Cursor/righttype-ubuntu/docs/PORTING-LINUX.md
+After=graphical-session.target
+PartOf=graphical-session.target
+Wants=rtlinux.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/rtlinux-tray
+Restart=on-failure
+RestartSec=3
+Environment=XDG_SESSION_TYPE=wayland
+
+[Install]
+WantedBy=graphical-session.target

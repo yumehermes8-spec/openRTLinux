@@ -76,3 +76,8 @@ pub mod timing;
 pub mod trainer;
 pub mod usage;
 pub mod why;
+
+/// The Linux desktop layer: evdev capture, uinput injection, layout queries.
+/// Windows code lives in the platform crate's own modules gated on `winos`.
+#[cfg(all(target_os = "linux", feature = "linuxos"))]
+pub mod linuxos;

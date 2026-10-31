@@ -4,6 +4,19 @@
 
 # RightType
 
+> ### Linux port
+>
+> This tree is **RightType's OS-free engine** with a Linux desktop layer written on
+> top: evdev capture, uinput injection, GNOME/Wayland layout switching that works (by
+> pressing the desktop's own switch key), a tray icon + settings window (GTK3), user
+> systemd units, and icons. Build, what is verified and what is still missing:
+> **[`docs/PORTING-LINUX.md`](docs/PORTING-LINUX.md)**.
+>
+> Upstream (Windows) is <https://github.com/k-affan-th/RightType> by k-affan-th. Its
+> commits are kept as they are, so their work merges in easily; the licence is
+> unchanged — MIT / Apache-2.0, see `LICENSE-MIT`, `LICENSE-APACHE` and
+> `THIRD_PARTY.md` — and the Windows layer still lives behind the `winos` feature.
+
 ### พิมพ์ผิดภาษา แก้ให้เอง
 
 แปลงข้อความที่พิมพ์ผิดคีย์บอร์ด ไทย ↔ อังกฤษ กลับให้ถูกต้อง โดยไม่ต้องลบแล้วพิมพ์ใหม่

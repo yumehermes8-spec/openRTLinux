@@ -1,0 +1,18 @@
+[Unit]
+Description=RightType (Linux port) — Thai/English layout fixer daemon
+Documentation=file:%h/Cursor/righttype-ubuntu/docs/PORTING-LINUX.md
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/rtlinux
+# a daemon that types should come back if it dies, but must not restart forever
+Restart=on-failure
+RestartSec=2
+# the session environment (D-Bus, WAYLAND_DISPLAY) is what gsettings needs;
+# systemd --user already carries it in a GNOME session
+Environment=XDG_SESSION_TYPE=wayland
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=RightType Tray
+Name[th]=RightType (ไอคอนถาดระบบ)
+Comment=Thai/English layout fixer — tray icon and settings
+Comment[th]=ตัวแก้พิมพ์ผิดแป้น ไทย/อังกฤษ — ไอคอนถาดระบบและการตั้งค่า
+Exec=rtlinux-tray
+Icon=rtlinux
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=thai;keyboard;layout;english;tray;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

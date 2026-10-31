@@ -23,12 +23,20 @@ path = "src/main.rs"
 [dependencies]
 zeroize = "1"
 
+# The Linux application (evdev capture + uinput injection + dconf layout).
+[[bin]]
+name = "rtlinux"
+path = "src/bin/rtlinux.rs"
+required-features = ["linuxos"]
+
 # --- Windows-only integration layer ---
 # Enabled incrementally as the OS layer is built (hook/inject/session/safety/ui).
 # Re-enable by adding `winos` to the default features, or build with
 # `--features winos`.
 [features]
 default = []
+# Linux integration layer: pull in the evdev/uinput crates
+linuxos = ["dep:evdev", "dep:serde", "dep:toml"]
 winos = [
     "dep:crossbeam-channel",
     "dep:once_cell",
@@ -39,6 +47,12 @@ winos = [
     "dep:windows",
     "dep:windows-core",
 ]
+
+# --- Linux integration layer (evdev capture + uinput injection) ---
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = { version = "0.13", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+toml = { version = "0.8", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 crossbeam-channel = { version = "0.5", optional = true }
