@@ -336,3 +336,28 @@ fvdw,h -> ดอกไม้  (3 step(s))   applied in 24 ms    # chord: Shift+S
 
 The auto path (fixing on a boundary) is unchanged: nothing there was asked for, so it
 keeps the strict word checker only.
+
+## Where this lives on GitHub
+
+The published repository is **<https://github.com/yumehermes8-spec/rtlinux>** - our own
+repository, not a GitHub fork (a fork would have been tied to upstream's repository and
+could not be renamed or reorganised freely; the upstream history is kept instead, so
+their commits merge in normally).
+
+```
+origin    https://github.com/yumehermes8-spec/rtlinux       <- ours
+upstream  https://github.com/k-affan-th/RightType           <- theirs (for merges)
+```
+
+Two working copies on the X13, on purpose:
+
+* `~/Cursor/righttype-ubuntu` - where the daemon is built and installed from
+  (`packaging/linux/install.sh`), and what the systemd units run;
+* `~/Cursor/righttype-publish` - the clone that is attached to GitHub. Its `main` is
+  upstream's history plus one commit containing the whole Linux port.
+
+Publishing rule learned the hard way: **never rsync a whole working tree over an
+upstream clone.** A copy taken days earlier carries older versions of files upstream has
+since changed, and copying it wholesale silently reverts their work (it did: eleven
+files, including `src/hook.rs`). Copy only what this port actually adds or changes, and
+check `git status` before committing.
