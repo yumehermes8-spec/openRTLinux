@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Talk to the rtlinux daemon from the shell.
+"""Talk to the openrtlinux daemon from the shell.
 
     python3 tools/linux/rtctl.py status
     python3 tools/linux/rtctl.py set mode manual
@@ -17,7 +17,7 @@ import socket
 import sys
 from pathlib import Path
 
-SOCKET = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "rtlinux.sock"
+SOCKET = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "openrtlinux.sock"
 
 
 def main() -> int:

@@ -13,10 +13,10 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profil
 export PATH="$HOME/.cargo/bin:$PATH"
 
 cargo test  --lib --features linuxos          # 287 upstream tests + the Linux ones
-cargo build --features linuxos --bin rtlinux
+cargo build --features linuxos --bin openrtlinux
 
-./target/debug/rtlinux --dry-run              # watch only: never types, never switches
-./target/debug/rtlinux                        # fix: switch the layout, then type
+./target/debug/openrtlinux --dry-run              # watch only: never types, never switches
+./target/debug/openrtlinux                        # fix: switch the layout, then type
 ```
 
 Useful flags: `--layout thai|us` (override the detected layout),
@@ -41,43 +41,43 @@ harness (synthetic typing and a kernel-level view of what was injected).
 
 ## Tray and settings window
 
-`rtlinux-tray` (Python 3 + GTK3 + libayatana-appindicator — all already on the X13;
+`openrtlinux-tray` (Python 3 + GTK3 + libayatana-appindicator — all already on the X13;
 GTK *bindings* in Rust would need `libgtk-3-dev`, which needs a password here).
-It drives the daemon over `/run/user/$UID/rtlinux.sock`: one request per line, one
+It drives the daemon over `/run/user/$UID/openrtlinux.sock`: one request per line, one
 JSON reply per line.
 
 * **Tray**: mode (auto / manual / off), the dry-run switch, "start daemon" when the
   socket is missing, the settings window, the journal, and stop/quit. The icon is
-  `rtlinux` normally and `rtlinux-off` when the mode is off or the daemon is gone.
+  `openrtlinux` normally and `openrtlinux-off` when the mode is off or the daemon is gone.
 * **Settings window**: modes, dry-run, the fix hotkey, the layout commands,
-  autostart, plus a live status line. Saving writes `~/.config/rtlinux/config.toml`
+  autostart, plus a live status line. Saving writes `~/.config/openrtlinux/config.toml`
   and asks the daemon to `reload` (mode and dry_run are also pushed, so a running
   daemon follows immediately).
-* `rtlinux-tray --report` prints the daemon's status (how to see what the tray sees
+* `openrtlinux-tray --report` prints the daemon's status (how to see what the tray sees
   over SSH); `--selftest` builds the widgets and the indicator and exits.
 * GNOME has no tray of its own: `install.sh` turns on
   `ubuntu-appindicators@ubuntu.com`, otherwise nothing appears. Verify with the
   watcher, not by eye: `gdbus call --session --dest org.kde.StatusNotifierWatcher
   --object-path /StatusNotifierWatcher --method org.freedesktop.DBus.Properties.Get
   org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems` should list
-  `.../org/ayatana/NotificationItem/rtlinux`.
+  `.../org/ayatana/NotificationItem/openrtlinux`.
 * The config ships **`dry_run = true`**: a fresh install only watches and logs until
   the user turns dry-run off in the tray. Keep it that way - a first run that types
   would be a surprise nobody forgives.
 
 ## How it runs on the X13 (systemd user units)
 
-`install.sh` installs `packaging/linux/rtlinux.service` and `rtlinux-tray.service`
+`install.sh` installs `packaging/linux/openrtlinux.service` and `openrtlinux-tray.service`
 into `~/.config/systemd/user/` and enables the daemon, so it is supervised and comes
 back with the session instead of being an orphan of whatever shell started it:
 
 ```bash
-systemctl --user status rtlinux.service
-journalctl --user -u rtlinux -n 30
-systemctl --user start|stop|restart rtlinux.service
+systemctl --user status openrtlinux.service
+journalctl --user -u openrtlinux -n 30
+systemctl --user start|stop|restart openrtlinux.service
 ```
 
-The tray asks systemd to start the daemon (`systemctl --user start rtlinux.service`)
+The tray asks systemd to start the daemon (`systemctl --user start openrtlinux.service`)
 and only falls back to spawning it directly - spawning it left an unreaped child
 behind (and an orphan that kept typing when the tray died).
 
@@ -110,8 +110,8 @@ behind (and an orphan that kept typing when the tray died).
    RemoteDesktop portal. Suggest mode, the palette, ghost suggestions,
    statistics, practice and the tray are not ported.
 4. **Icons and a menu entry exist now** (`packaging/linux/`): `make_icons.py`
-   draws 16-512 px PNGs (per size, never scaled down) plus `rtlinux.svg` and the
-   grey `--variant off` tile, `rtlinux.desktop` names the app in Thai and English,
+   draws 16-512 px PNGs (per size, never scaled down) plus `openrtlinux.svg` and the
+   grey `--variant off` tile, `openrtlinux.desktop` names the app in Thai and English,
    and `install.sh` copies both into `~/.local/share/icons` and
    `~/.local/share/applications`. Still missing: a `systemd --user` unit, an
    autostart entry, and a tray icon (there is no tray yet).
@@ -142,8 +142,8 @@ behind (and an orphan that kept typing when the tray died).
   perfectly healthy).
 - **GTK3 `GtkLabel` has no `xmin` property** (that is GTK4/Vala talk) - build a
   plain label and `set_xalign(0)` / `set_halign(START)`.
-- **Installed launchers are copies, not links.** `~/.local/bin/rtlinux-tray` is a
-  copy of `gui/rtlinux_tray.py`, so editing the repo changes nothing until
+- **Installed launchers are copies, not links.** `~/.local/bin/openrtlinux-tray` is a
+  copy of `gui/openrtlinux_tray.py`, so editing the repo changes nothing until
   `install.sh --no-build` runs again (a stale copy kept the old GTK bug alive
   through a whole test cycle).
 - **`rsync -a` from a UTC box makes every source file look older than the build.**
@@ -153,7 +153,7 @@ behind (and an orphan that kept typing when the tray died).
   Touch the sources after every rsync (`find src -name '*.rs' -exec touch {} +`) or
   rsync with `-I`.
 - **Killing the local SSH job does not kill the remote daemon.** An
-  `ssh host './rtlinux'` started as a background job leaves an orphaned `rtlinux`
+  `ssh host './openrtlinux'` started as a background job leaves an orphaned `openrtlinux`
   on the far side when the local process is killed — it keeps typing. Stop it on
   the remote side (`ssh host 'pkill -f "[r]tlinux"'`) and verify with `ps` before
   walking away.
@@ -339,13 +339,13 @@ keeps the strict word checker only.
 
 ## Where this lives on GitHub
 
-The published repository is **<https://github.com/yumehermes8-spec/rtlinux>** - our own
+The published repository is **<https://github.com/yumehermes8-spec/openrtlinux>** - our own
 repository, not a GitHub fork (a fork would have been tied to upstream's repository and
 could not be renamed or reorganised freely; the upstream history is kept instead, so
 their commits merge in normally).
 
 ```
-origin    https://github.com/yumehermes8-spec/rtlinux       <- ours
+origin    https://github.com/yumehermes8-spec/openrtlinux       <- ours
 upstream  https://github.com/k-affan-th/RightType           <- theirs (for merges)
 ```
 

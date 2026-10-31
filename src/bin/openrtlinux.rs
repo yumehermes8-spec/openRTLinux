@@ -1,11 +1,11 @@
-//! rtlinux - openRTLinux's daemon: RightType's detection core, wired to a Linux desktop.
+//! openrtlinux - openRTLinux's daemon: RightType's detection core, wired to a Linux desktop.
 //!
 //! Run it from a terminal: it prints what it captured, what the core decided,
 //! and (unless `--dry-run`) what it injected.
 //!
 //! ```text
-//! rtlinux --dry-run     # watch only: never types, never switches layout
-//! rtlinux               # fix words: switch the layout, then type
+//! openrtlinux --dry-run     # watch only: never types, never switches layout
+//! openrtlinux               # fix words: switch the layout, then type
 //! ```
 //!
 //! Everything the Windows app does at the text cursor (palette, ghost
@@ -93,7 +93,7 @@ fn parse_args() -> Args {
             "--debug" => args.debug = true,
             "-h" | "--help" => {
                 println!(
-                    "rtlinux [--dry-run] [--layout thai|us] \
+                    "openrtlinux [--dry-run] [--layout thai|us] \
                      [--current-command 'CMD'] [--switch-command 'CMD']"
                 );
                 std::process::exit(0);
@@ -303,7 +303,7 @@ fn main() {
     let mut last_backspace: Option<Instant> = None;
     'daemon: loop {
         if control.quitting() {
-            println!("rtlinux: asked to quit");
+            println!("openrtlinux: asked to quit");
             break 'daemon;
         }
         if control.take_reload() {
@@ -324,7 +324,7 @@ fn main() {
                 );
             });
             println!(
-                "rtlinux: config reloaded (mode {}, dry_run {})",
+                "openrtlinux: config reloaded (mode {}, dry_run {})",
                 cfg.mode.as_str(),
                 cfg.dry_run
             );

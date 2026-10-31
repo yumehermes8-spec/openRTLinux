@@ -1,4 +1,4 @@
-//! `~/.config/rtlinux/config.toml` — the settings the daemon and the tray share.
+//! `~/.config/openrtlinux/config.toml` — the settings the daemon and the tray share.
 //!
 //! Written so that the tray/GUI (Python, GTK) and the daemon (Rust) never fight
 //! over the file: the GUI writes it and asks the daemon to reload, the daemon
@@ -120,7 +120,7 @@ impl Config {
         let base = std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
             format!("{}/.config", std::env::var("HOME").unwrap_or_else(|_| ".".into()))
         });
-        Path::new(&base).join("rtlinux").join("config.toml")
+        Path::new(&base).join("openrtlinux").join("config.toml")
     }
 
     pub fn load() -> Config {

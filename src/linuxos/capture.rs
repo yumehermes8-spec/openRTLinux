@@ -63,6 +63,15 @@ pub struct Capture {
     last_scan: Instant,
 }
 
+/// One of our own virtual keyboards?
+///
+/// Reading our own injections back would make the daemon chase its own tail, so
+/// the device name it registers with uinput is filtered out - under the current
+/// name and the one the port used before it was renamed.
+fn is_ours(name: &str) -> bool {
+    name.contains("openRTLinux") || name.contains("RightType")
+}
+
 /// Is this device something a person types on?
 ///
 /// Requiring `KEY_A` alone is too strict: a *virtual* keyboard (the test tool,

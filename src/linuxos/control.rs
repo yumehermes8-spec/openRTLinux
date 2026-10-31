@@ -1,6 +1,6 @@
 //! The control socket the tray and the settings window talk to.
 //!
-//! `/run/user/1000/rtlinux.sock`, one request per line, one JSON reply per line
+//! `/run/user/1000/openrtlinux.sock`, one request per line, one JSON reply per line
 //! (the same shape the earlier Thai layout fixer on this host used, because the
 //! GUI side is Python and JSON keeps both ends honest):
 //!
@@ -47,7 +47,7 @@ pub struct Shared {
 
 pub fn socket_path() -> PathBuf {
     let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
-    PathBuf::from(runtime).join("rtlinux.sock")
+    PathBuf::from(runtime).join("openrtlinux.sock")
 }
 
 pub struct Control {
@@ -72,7 +72,7 @@ impl Control {
         let thread_shared = Arc::clone(&shared);
         let thread_stop = Arc::clone(&stop);
         thread::Builder::new()
-            .name("rtlinux-control".into())
+            .name("openrtlinux-control".into())
             .spawn(move || {
                 for stream in listener.incoming() {
                     if thread_stop.load(Ordering::Relaxed) {

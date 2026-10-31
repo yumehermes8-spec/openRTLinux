@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""rtlinux tray + settings window.
+"""openrtlinux tray + settings window.
 
-    rtlinux-tray                 # tray icon, and the settings window on demand
-    rtlinux-tray --window        # open the settings window straight away
-    rtlinux-tray --report        # print the daemon's status and exit
-    rtlinux-tray --selftest      # build every widget, print OK, exit (for CI/SSH)
+    openrtlinux-tray                 # tray icon, and the settings window on demand
+    openrtlinux-tray --window        # open the settings window straight away
+    openrtlinux-tray --report        # print the daemon's status and exit
+    openrtlinux-tray --selftest      # build every widget, print OK, exit (for CI/SSH)
 
 Why Python and not Rust: the port's own layer is Rust, but GTK *bindings* need
 `libgtk-3-dev` + pkg-config, which this box cannot install without a password.
 python3-gi, GTK3 and libayatana-appindicator are already here, and the daemon is
 controlled over a socket, so the language of the window makes no difference.
 
-Talks to the daemon on `/run/user/$UID/rtlinux.sock`; writes
-`~/.config/rtlinux/config.toml` and asks the daemon to reload it.
+Talks to the daemon on `/run/user/$UID/openrtlinux.sock`; writes
+`~/.config/openrtlinux/config.toml` and asks the daemon to reload it.
 """
 
 from __future__ import annotations
@@ -39,9 +39,9 @@ except Exception:  # pragma: no cover - depends on the machine
     AppIndicator = None
     HAVE_TRAY = False
 
-APP = "rtlinux"
-ICON_ON = "rtlinux"
-ICON_OFF = "rtlinux-off"
+APP = "openrtlinux"
+ICON_ON = "openrtlinux"
+ICON_OFF = "openrtlinux-off"
 # the chords a person can pick for "fix the word under the cursor"
 HOTKEYS = [
     ("shift+backspace", "Shift+Backspace"),
@@ -96,7 +96,7 @@ def start_daemon() -> str:
     """
     try:
         done = subprocess.run(
-            ["systemctl", "--user", "start", "rtlinux.service"],
+            ["systemctl", "--user", "start", "openrtlinux.service"],
             capture_output=True,
             text=True,
             timeout=15,
@@ -105,7 +105,7 @@ def start_daemon() -> str:
             return "started (systemd)"
     except Exception:  # noqa: BLE001 - fall through to plain spawn
         pass
-    exe = shutil_which("rtlinux") or str(Path.home() / ".local/bin" / "rtlinux")
+    exe = shutil_which("openrtlinux") or str(Path.home() / ".local/bin" / "openrtlinux")
     try:
         subprocess.Popen(
             [exe],
@@ -335,20 +335,20 @@ def toml_dump(data: dict) -> str:
 
 
 def apply_autostart(enabled: bool) -> str:
-    target = Path.home() / ".config" / "autostart" / "rtlinux-tray.desktop"
+    target = Path.home() / ".config" / "autostart" / "openrtlinux-tray.desktop"
     if not enabled:
         if target.exists():
             target.unlink()
         return "autostart off"
     target.parent.mkdir(parents=True, exist_ok=True)
-    source = Path(__file__).resolve().parent / "rtlinux-tray.desktop"
+    source = Path(__file__).resolve().parent / "openrtlinux-tray.desktop"
     if source.exists():
         target.write_text(source.read_text())
     else:
         target.write_text(
             "[Desktop Entry]\nType=Application\nName=openRTLinux tray\n"
             f"Exec={sys.executable} {Path(__file__).resolve()}\n"
-            "Icon=rtlinux\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
+            "Icon=openrtlinux\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
         )
     return f"autostart on ({target})"
 

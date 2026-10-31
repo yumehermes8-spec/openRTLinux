@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Print every key event the kernel sees, with the device that sent it.
 
-Used to verify what rtlinux *injects* when there is no focusable app to read
+Used to verify what openrtlinux *injects* when there is no focusable app to read
 back (no X11 test app is installed on this box and windows cannot be focused
 over SSH).
 

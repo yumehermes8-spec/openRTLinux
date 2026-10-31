@@ -150,7 +150,7 @@ def main() -> int:
     out = Path(args.out)
     colors = ON if args.variant == "on" else OFF
     swap = args.swap
-    name = "rtlinux" if args.variant == "on" else "rtlinux-off"
+    name = "openrtlinux" if args.variant == "on" else "openrtlinux-off"
 
     written = []
     for size in SIZES:
@@ -161,12 +161,12 @@ def main() -> int:
         written.append(target)
     # GNOME looks in scalable/ too, and some launchers only ask for one PNG
     img = tile(256, colors, thai, latin, swap)
-    for extra in (out / f"{name}.png", out / "righttype-linux.png"):
+    for extra in (out / f"{name}.png", out / "openrtlinux-screenshot.png"):
         extra.parent.mkdir(parents=True, exist_ok=True)
         img.save(extra)
         written.append(extra)
     if args.variant == "on":
-        svg = out / "rtlinux.svg"
+        svg = out / "openrtlinux.svg"
         svg.write_text(SVG)
         written.append(svg)
 

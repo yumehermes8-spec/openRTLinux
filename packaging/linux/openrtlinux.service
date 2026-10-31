@@ -6,7 +6,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/rtlinux
+ExecStart=%h/.local/bin/openrtlinux
 # a daemon that types should come back if it dies, but must not restart forever
 Restart=on-failure
 RestartSec=2

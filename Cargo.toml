@@ -25,8 +25,8 @@ zeroize = "1"
 
 # The Linux application (evdev capture + uinput injection + dconf layout).
 [[bin]]
-name = "rtlinux"
-path = "src/bin/rtlinux.rs"
+name = "openrtlinux"
+path = "src/bin/openrtlinux.rs"
 required-features = ["linuxos"]
 
 # --- Windows-only integration layer ---

@@ -43,10 +43,10 @@ bash packaging/linux/install.sh --release --with-tray
 
 | สิ่งที่ติดตั้ง | ที่อยู่ |
 | --- | --- |
-| ไดมอน | `~/.local/bin/rtlinux` |
-| หน้าตั้งค่า/ถาด | `~/.local/bin/rtlinux-tray` |
-| ตั้งค่า | `~/.config/rtlinux/config.toml` |
-| service ของผู้ใช้ | `~/.config/systemd/user/rtlinux.service`, `rtlinux-tray.service` |
+| ไดมอน | `~/.local/bin/openrtlinux` |
+| หน้าตั้งค่า/ถาด | `~/.local/bin/openrtlinux-tray` |
+| ตั้งค่า | `~/.config/openrtlinux/config.toml` |
+| service ของผู้ใช้ | `~/.config/systemd/user/openrtlinux.service`, `openrtlinux-tray.service` |
 | เมนู + ไอคอน | `~/.local/share/applications/`, `~/.local/share/icons/hicolor/` |
 
 ตัวเลือกของสคริปต์: `--release` (build แบบ optimize) · `--no-build` · `--with-tray` · `--no-service` · `--no-extension`
@@ -106,14 +106,14 @@ bash packaging/linux/install.sh --release --with-tray
 **ดูว่ากำลังทำอะไรอยู่**
 
 ```bash
-journalctl --user -u rtlinux -f          # ทุกครั้งที่แก้ จะบอก "fvdw,h -> ดอกไม้" + ใช้เวลา
-rtlinux --debug --mode manual --fix      # พิมพ์ทุกปุ่มที่เห็น (รันเองในเทอร์มินัล)
-RTLINUX_TIMINGS=1 rtlinux --debug        # แสดงเวลาที่ใช้แต่ละขั้น (สลับแป้น/ลบ/พิมพ์)
+journalctl --user -u openrtlinux -f          # ทุกครั้งที่แก้ จะบอก "fvdw,h -> ดอกไม้" + ใช้เวลา
+openrtlinux --debug --mode manual --fix      # พิมพ์ทุกปุ่มที่เห็น (รันเองในเทอร์มินัล)
+RTLINUX_TIMINGS=1 openrtlinux --debug        # แสดงเวลาที่ใช้แต่ละขั้น (สลับแป้น/ลบ/พิมพ์)
 ```
 
 **ไม่แก้ให้เลย**
 
-1. เช็คว่า service ทำงาน: `systemctl --user status rtlinux.service`
+1. เช็คว่า service ทำงาน: `systemctl --user status openrtlinux.service`
 2. เช็คโหมด: ไอคอนถาด หรือ `python3 tools/linux/rtctl.py status` (โหมด `manual` ต้องกด hotkey เอง)
 3. สิทธิ์คีย์บอร์ดเสมือน: ไดมอนต้องเขียน `/dev/uinput` ได้ (`ls -l /dev/uinput` — ปกติสิทธิ์ของคนที่นั่งหน้าเครื่องใช้ได้อยู่แล้ว)
 4. ถ้า log ขึ้น **"holding the modifier, not typing"** = ตอนนั้นยังกด Shift ค้างอยู่ → ปล่อย Shift แล้วกดใหม่ (ระบบเลือกที่จะไม่พิมพ์ ดีกว่าพิมพ์ออกมาเพี้ยน)
@@ -126,11 +126,11 @@ RTLINUX_TIMINGS=1 rtlinux --debug        # แสดงเวลาที่ใ�
 **ปิด / ถอนการติดตั้ง**
 
 ```bash
-systemctl --user disable --now rtlinux.service rtlinux-tray.service
-rm -f ~/.local/bin/rtlinux ~/.local/bin/rtlinux-tray
-rm -rf ~/.config/rtlinux ~/.local/share/applications/rtlinux*.desktop
-rm -f ~/.config/systemd/user/rtlinux*.service && systemctl --user daemon-reload
-rm -rf ~/.local/share/icons/hicolor/*/apps/rtlinux*       # ไอคอน
+systemctl --user disable --now openrtlinux.service openrtlinux-tray.service
+rm -f ~/.local/bin/openrtlinux ~/.local/bin/openrtlinux-tray
+rm -rf ~/.config/openrtlinux ~/.local/share/applications/openrtlinux*.desktop
+rm -f ~/.config/systemd/user/openrtlinux*.service && systemctl --user daemon-reload
+rm -rf ~/.local/share/icons/hicolor/*/apps/openrtlinux*       # ไอคอน
 ```
 
 ## สถานะวันนี้

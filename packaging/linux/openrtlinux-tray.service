@@ -3,11 +3,11 @@ Description=openRTLinux — tray icon and settings window
 Documentation=file:%h/Cursor/righttype-ubuntu/docs/PORTING-LINUX.md
 After=graphical-session.target
 PartOf=graphical-session.target
-Wants=rtlinux.service
+Wants=openrtlinux.service
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/rtlinux-tray
+ExecStart=%h/.local/bin/openrtlinux-tray
 Restart=on-failure
 RestartSec=3
 Environment=XDG_SESSION_TYPE=wayland
