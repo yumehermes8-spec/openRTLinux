@@ -95,20 +95,6 @@
 
 ## Deny policy
 
-- **Keys other programs send** (`LLKHF_INJECTED`, e.g. a password manager's auto-type,
-  a remote-control tool, the on-screen keyboard) are not typing: they never reach the word
-  buffer, so a secret typed that way cannot be buffered, learned or converted. Two
-  exceptions (2.6.6): (1) when the window in front is one of RightType's own (the welcome
-  window's try-it box, Fix text, Settings), where nothing private is typed — keys and
-  Unicode-packet characters are taken as typing there; (2) a **hotkey chord** (the key plus
-  the held modifiers matching one of the configured hotkeys) is acted on, so Shift+Backspace
-  or Ctrl+CapsLock from such a source do the hotkey's job instead of acting as a plain
-  Backspace or toggling CapsLock. The chord acts on the selection, the mode or the undo
-  record; it cannot make injected letters part of a word. When only ignored keys arrive
-  (four or more, with no key from the real keyboard in the last 10 s) one notice says
-  so, at most every 10 minutes (`ToastIgnoredKeys`). Evidence: `e2e` probes run with the
-  debug build's injected-key switch off — welcome window and Notepad.
-
 - Native password controls, UIA password controls, fixed/custom blacklisted processes
   (including remote-desktop and VM clients, whose keys go to another computer),
   a full-screen program without a text cursor and not focused on a text field

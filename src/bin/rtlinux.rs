@@ -1,4 +1,4 @@
-//! rtlinux - RightType's detection core, wired to a Linux desktop.
+//! rtlinux - openRTLinux's daemon: RightType's detection core, wired to a Linux desktop.
 //!
 //! Run it from a terminal: it prints what it captured, what the core decided,
 //! and (unless `--dry-run`) what it injected.
@@ -259,7 +259,7 @@ fn main() {
         }
     };
 
-    println!("rtlinux: {}", capture.describe());
+    println!("openRTLinux {}: {}", env!("CARGO_PKG_VERSION"), capture.describe());
     println!("  fix chord: {}", fix_chord.label());
     println!(
         "  {}",

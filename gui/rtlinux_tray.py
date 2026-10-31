@@ -151,7 +151,7 @@ def describe(status: dict) -> str:
 # ------------------------------------------------------------------ settings
 class SettingsWindow(Gtk.Window):
     def __init__(self, tray=None) -> None:
-        super().__init__(title="RightType (Linux) — ตั้งค่า")
+        super().__init__(title="openRTLinux — ตั้งค่า")
         self.tray = tray
         self.set_default_size(560, 380)
         self.set_border_width(12)
@@ -346,7 +346,7 @@ def apply_autostart(enabled: bool) -> str:
         target.write_text(source.read_text())
     else:
         target.write_text(
-            "[Desktop Entry]\nType=Application\nName=RightType tray\n"
+            "[Desktop Entry]\nType=Application\nName=openRTLinux tray\n"
             f"Exec={sys.executable} {Path(__file__).resolve()}\n"
             "Icon=rtlinux\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
         )
@@ -360,7 +360,7 @@ class Tray:
             APP, ICON_ON, AppIndicator.IndicatorCategory.APPLICATION_STATUS
         )
         self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
-        self.indicator.set_title("RightType")
+        self.indicator.set_title("openRTLinux")
         self.menu = Gtk.Menu()
         self.status_item = Gtk.MenuItem(label="…")
         self.status_item.set_sensitive(False)
@@ -425,7 +425,7 @@ class Tray:
         self.dry_item.set_active(bool(status.get("dry_run", True)))
         self.dry_item.handler_unblock_by_func(self.on_dry_run)
         off = status.get("mode") == "off" or not running
-        self.indicator.set_icon_full(ICON_OFF if off else ICON_ON, "RightType")
+        self.indicator.set_icon_full(ICON_OFF if off else ICON_ON, "openRTLinux")
         return True
 
     def on_mode(self, item, key: str) -> None:
@@ -444,7 +444,7 @@ class Tray:
             # say it out loud once: this is the switch that makes it act
             subprocess.Popen(
                 ["sh", "-c", "command -v notify-send >/dev/null && "
-                 "notify-send -a RightType 'RightType' 'เริ่มแก้จริงแล้ว — จะพิมพ์/สลับแป้นให้'"],
+                 "notify-send -a openRTLinux 'openRTLinux' 'เริ่มแก้จริงแล้ว — จะพิมพ์/สลับแป้นให้'"],
                 start_new_session=True,
             )
 

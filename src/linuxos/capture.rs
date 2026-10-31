@@ -89,7 +89,7 @@ impl Capture {
         let mut inodes: HashMap<PathBuf, u64> = HashMap::new();
         for (path, dev) in evdev::enumerate() {
             let name = dev.name().unwrap_or_default().to_string();
-            if name.contains("RightType") {
+            if is_ours(&name) {
                 continue; // never read our own injected keys back
             }
             if is_keyboard(&dev) {
@@ -157,7 +157,7 @@ impl Capture {
     /// belongs to a *different* device (the node is reused).
     fn rescan(&mut self) {
         for (path, dev) in evdev::enumerate() {
-            if dev.name().unwrap_or_default().contains("RightType") {
+            if is_ours(&dev.name().unwrap_or_default()) {
                 continue;
             }
             let ino = std::fs::metadata(&path).map(|m| m.ino()).ok();

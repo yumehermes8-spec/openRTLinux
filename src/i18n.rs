@@ -126,7 +126,6 @@ texts! {
     ToastFlippedOne => "Flipped 1 word", "แก้ 1 คำแล้ว";
     ToastFlippedOneBack => "Flipped 1 word · again to put it back", "แก้ 1 คำแล้ว · กดอีกครั้งเพื่อคืนค่าเดิม";
     ToastFlippedOneMore => "Flipped 1 word · again for the one before", "แก้ 1 คำแล้ว · กดอีกครั้งแก้คำก่อนหน้า";
-    ToastIgnoredKeys => "RightType ignores keys sent by other programs (remote control, on-screen keyboard). Use the keyboard itself, or Fix text from the tray.", "RightType ไม่รับคีย์ที่โปรแกรมอื่นส่งมา (รีโมต หรือคีย์บอร์ดบนจอ) ให้ใช้คีย์บอร์ดจริง หรือใช้ Fix text จากถาดระบบ";
     ToastNothingToFlip => "Nothing to flip here (the cursor moved, or no more words)", "ไม่มีคำให้แก้ตรงนี้ (เคอร์เซอร์ย้ายแล้ว หรือไม่มีคำก่อนหน้า)";
     ToastPaused => "Paused for {n} minutes", "หยุดชั่วคราว {n} นาที";
     ToastAppMode => "{mode} in {app}", "{mode} ใน {app}";
@@ -662,9 +661,6 @@ texts! {
     WelcomeTryManual => "Try it: type l;ylfu on the English keyboard, then press Shift+Backspace", "ลองเลย: เปิดแป้นอังกฤษ พิมพ์ l;ylfu แล้วกด Shift+Backspace ในช่องนี้";
     WelcomeKeyboards => "Keyboards found: {kb}", "แป้นที่พบในเครื่อง: {kb}";
     WelcomeNoThai => "No Thai keyboard is installed. Add one in Windows (Settings → Time & language → Language & region) so RightType can fix English typed by mistake.", "ยังไม่มีแป้นไทยในเครื่อง เพิ่มได้ที่ Windows (ตั้งค่า → เวลาและภาษา → ภาษาและภูมิภาค) เพื่อให้ RightType แก้ข้อความที่พิมพ์ผิดได้";
-    WelcomeStepFlip => "✓ Fixed. Now press {flip} to flip it back.", "✓ แก้แล้ว ลองกด {flip} เพื่อพลิกกลับ";
-    WelcomeStepMode => "✓ {flip} works. Last one: press {mode} to change the mode.", "✓ {flip} ใช้ได้ อีกอย่างเดียว: กด {mode} เพื่อเปลี่ยนโหมด";
-    WelcomeStepDone => "✓ Everything works. Click Get started.", "✓ ใช้ได้ครบแล้ว กด เริ่มใช้งาน ได้เลย";
     WelcomeTryOk => "✓ Fixed. This is what RightType does in every app.", "✓ แก้แล้ว RightType ทำแบบนี้ได้ในทุกแอป";
     WelcomeTryNot => "Not fixed? Make sure the English (US) keyboard is active (Alt+Shift switches), then type l;ylfu and a space again.", "ยังไม่เปลี่ยน? ตรวจว่าเปิดแป้นอังกฤษ (US) อยู่ (สลับด้วย Alt+Shift) แล้วพิมพ์ l;ylfu ตามด้วยเว้นวรรคอีกครั้ง";
     HelpHeadline => "Hotkeys", "ปุ่มลัด";

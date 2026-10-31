@@ -647,7 +647,6 @@ pub fn run() {
                 UI_REVIEW => crate::palette::open_review(),
                 UI_FIX_WINDOW => crate::fixer::open(),
                 UI_WELCOME_DONE => overlay::show(tr(T::WelcomeInTray)),
-                UI_IGNORED_KEYS => overlay::show(tr(T::ToastIgnoredKeys)),
                 _ => {}
             }
         }
@@ -721,8 +720,6 @@ pub const UI_REVIEW: usize = 1;
 pub const UI_FIX_WINDOW: usize = 2;
 /// Say RightType is running (the welcome window has just flown into the tray).
 pub const UI_WELCOME_DONE: usize = 3;
-/// Say that keys sent by other programs are ignored (nothing else arrived).
-pub const UI_IGNORED_KEYS: usize = 4;
 static TRAY_HWND: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
 /// The tray window's handle (0 before the tray is up), for finding its icon.

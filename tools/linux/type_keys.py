@@ -5,7 +5,7 @@
     python3 tools/linux/type_keys.py switch        # press the layout switch key (grave)
 
 Needs read/write access to /dev/uinput (uaccess ACL or the `input` group). It is
-a *test* device on purpose: rtlinux filters only its own "RightType virtual
+a *test* device on purpose: rtlinux filters only its own "openRTLinux virtual
 keyboard" by name, so what this types looks exactly like a person typing.
 """
 

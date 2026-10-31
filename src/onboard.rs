@@ -9,7 +9,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use native_windows_gui as nwg;
-use righttype::hotkeys::Action;
 use righttype::i18n::{tr, trf, T};
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Gdi::HDC;
@@ -168,20 +167,15 @@ pub fn show(first_run: bool) {
             0,
         );
     }
-    // The hotkey rows: each gets a tick once the keyboard hook has really
-    // received that hotkey (first run only; see the timer below).
-    let mut rows: Vec<(u16, Action, String, String)> = Vec::new();
     for (i, (action, keys)) in hotkey_rows().into_iter().take(lay.rows).enumerate() {
         let y = lay.keys_y + 4 + i as i32 * ROW;
-        let label = tr(action).to_string();
-        let id = s.label(
-            &format!("{label}\t{keys}"),
+        s.label(
+            &format!("{}\t{keys}", tr(action)),
             TextStyle::Keys,
             (X + 20, y + 8, CW - 40, 30),
             p.surface,
             0,
         );
-        rows.push((id, Action::ALL[i], label, keys));
     }
     let foot_y = lay.keys_y + lay.rows as i32 * ROW + 8 + 20;
     let mode = tr(match hook::mode() {
@@ -285,9 +279,6 @@ pub fn show(first_run: bool) {
         }
     }
     let seen = std::cell::RefCell::new((String::new(), 0u32));
-    // Once a word has been fixed it stays fixed for the steps below, even
-    // after Shift+Backspace flips the text back to English.
-    let ever_fixed = std::cell::Cell::new(false);
     let win_h = win.clone();
     let handler = nwg::full_bind_event_handler(&win.window.handle, move |evt, _data, handle| {
         if matches!(evt, nwg::Event::OnWindowClose) && handle == win_h.window.handle {
@@ -299,49 +290,17 @@ pub fn show(first_run: bool) {
             let mut seen = seen.borrow_mut();
             seen.1 = if text == seen.0 { seen.1 + 1 } else { 0 };
             seen.0 = text.clone();
-            if text.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c)) {
-                ever_fixed.set(true);
-            }
-            let fixed = ever_fixed.get();
-            let keys = hook::hotkeys();
-            let (flip, cycle) = (
-                hook::hotkey_seen(Action::Flip),
-                hook::hotkey_seen(Action::Cycle),
-            );
-            // Step by step: fix a word, flip it back, change the mode.
-            let shown = if fixed && flip && cycle {
-                tr(T::WelcomeStepDone).to_string()
-            } else if fixed && flip {
-                trf(
-                    T::WelcomeStepMode,
-                    &[
-                        ("flip", &keys.chord(Action::Flip).format()),
-                        ("mode", &keys.chord(Action::Cycle).format()),
-                    ],
-                )
-            } else if fixed {
-                trf(
-                    T::WelcomeStepFlip,
-                    &[("flip", &keys.chord(Action::Flip).format())],
-                )
+            let fixed = text.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c));
+            let shown = if fixed {
+                tr(T::WelcomeTryOk)
             } else if !text.trim().is_empty() && seen.1 >= 5 {
                 // About 1.5 s of nothing happening after typing.
-                tr(T::WelcomeTryNot).to_string()
+                tr(T::WelcomeTryNot)
             } else {
-                String::new()
+                ""
             };
             if s.text_of(result) != shown {
-                s.set_text(result, &shown);
-            }
-            for (id, action, label, keys) in &rows {
-                let line = if hook::hotkey_seen(*action) {
-                    format!("\u{2713} {label}\t{keys}")
-                } else {
-                    format!("{label}\t{keys}")
-                };
-                if s.text_of(*id) != line {
-                    s.set_text(*id, &line);
-                }
+                s.set_text(result, shown);
             }
         }
     });

@@ -17,7 +17,3 @@ e2e/*.log
 docs/poster/reel_generator.html
 docs/poster/logo_studio.html
 docs/poster/*_dither.png
-
-# e2e run output
-e2e/RightType-test-report.txt
-e2e/RightType-test-trace.txt

@@ -41,20 +41,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   Snippets are laid out that way, and the folder buttons on Learned words are in
   their own card.
 
-## [2.6.6] — 2026-10-29
-
-### Fixed
-
-- Hotkeys now work when the keys come from another program (a remote-control tool, the
-  on-screen keyboard): Shift+Backspace no longer acts as a plain Backspace and Ctrl+CapsLock
-  no longer turns CapsLock on. Typed letters sent that way are still ignored (a password
-  manager's auto-type must never be read), except in RightType's own windows. When only such
-  keys arrive, a notice says RightType ignores them and to use the keyboard itself.
+## [2.6.5] — 2026-10-29
 
 ### Changed
 
-- The welcome window checks the hotkeys step by step: each hotkey row gets a tick once the
-  keyboard hook has really received it, and the line under the try-it box says what to do next.
 - First-run welcome: a fresh install now starts in Auto, so the try-it box
   fixes `l;ylfu` at the space. Existing installs keep their mode.
 - The welcome window has an English | ไทย switch (preselected from Windows),

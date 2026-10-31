@@ -61,7 +61,7 @@ impl Injector {
             keys.insert(extra);
         }
         let dev = VirtualDevice::builder()?
-            .name("RightType virtual keyboard")
+            .name("openRTLinux virtual keyboard")
             .with_keys(&keys)?
             .build()?;
         Ok(Injector { dev })

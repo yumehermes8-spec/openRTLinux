@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the Linux icon set for the RightType port (`rtlinux`).
+"""Generate the Linux icon set for openRTLinux.
 
     python3 packaging/linux/make_icons.py [--out packaging/linux]
 

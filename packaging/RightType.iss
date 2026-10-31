@@ -6,7 +6,7 @@
 
 #define MyAppName "RightType"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.6.6"
+  #define MyAppVersion "2.6.5"
 #endif
 #define MyAppExe "righttype.exe"
 ; x64 (default) or arm64; build_release.ps1 -Arch passes it, with where the exe is.

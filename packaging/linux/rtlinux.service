@@ -1,5 +1,5 @@
 [Unit]
-Description=RightType (Linux port) — Thai/English layout fixer daemon
+Description=openRTLinux — Thai/English layout fixer daemon
 Documentation=file:%h/Cursor/righttype-ubuntu/docs/PORTING-LINUX.md
 After=graphical-session.target
 PartOf=graphical-session.target

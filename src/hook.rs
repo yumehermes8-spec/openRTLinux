@@ -42,6 +42,7 @@ use std::ffi::c_void;
 
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+#[cfg(debug_assertions)]
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_PACKET;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, GetKeyboardLayout, GetKeyboardLayoutList, ToUnicodeEx, HKL,
@@ -1415,78 +1416,6 @@ unsafe fn is_down(vk: VIRTUAL_KEY) -> bool {
     (GetAsyncKeyState(vk.0 as i32) as u16 & 0x8000) != 0
 }
 
-/// Keys another program sent that RightType still acts on:
-///
-/// * keys for one of RightType's own windows (the welcome window's try-it box,
-///   Fix text), where nothing private is typed; and
-/// * a hotkey chord (Shift+Backspace, Ctrl+CapsLock ...), so the hotkeys also
-///   work from an on-screen keyboard or a remote-control tool, and are not
-///   left to act as plain Backspace or CapsLock. Only the chord is taken: the
-///   letters typed that way still do not reach the word buffer.
-unsafe fn injected_wanted(kb: &KBDLLHOOKSTRUCT) -> bool {
-    if foreground_is_own() {
-        return true;
-    }
-    hotkeys()
-        .action_for(
-            kb.vkCode as u16,
-            is_down(VK_CONTROL),
-            is_down(VK_SHIFT),
-            is_down(VK_MENU),
-        )
-        .is_some()
-}
-
-/// Is the window in front one of RightType's own (the welcome window, Fix
-/// text, Settings)?
-unsafe fn foreground_is_own() -> bool {
-    let mut pid = 0u32;
-    GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut pid));
-    pid != 0 && pid == windows::Win32::System::Threading::GetCurrentProcessId()
-}
-
-/// `GetTickCount` time of the last key from the real keyboard (0 = none yet).
-static LAST_HARDWARE_KEY: AtomicU32 = AtomicU32::new(0);
-/// Keys ignored since the last one from the real keyboard.
-static IGNORED_RUN: AtomicU32 = AtomicU32::new(0);
-/// When the "keys from other programs are ignored" notice was last asked for.
-static LAST_IGNORED_NOTICE: AtomicU32 = AtomicU32::new(0);
-/// Ignored keys, with no real key for a while, before the notice is shown.
-const IGNORED_NOTICE_AFTER: u32 = 4;
-const HARDWARE_QUIET_MS: u32 = 10_000;
-const IGNORED_NOTICE_GAP_MS: u32 = 10 * 60_000;
-
-/// Tell where keys come from. If only other programs' keys arrive (a remote
-/// tool, the on-screen keyboard) and none from the keyboard itself, nothing of
-/// RightType works and nothing says why: say so, once in a while. A password
-/// manager's auto-type does not trigger it: the key that started it was real.
-fn note_key_source(ignored: bool, hardware: bool, time: u32) {
-    if hardware {
-        LAST_HARDWARE_KEY.store(time, Ordering::Relaxed);
-        IGNORED_RUN.store(0, Ordering::Relaxed);
-        return;
-    }
-    if !ignored {
-        return;
-    }
-    let run = IGNORED_RUN.fetch_add(1, Ordering::Relaxed) + 1;
-    let quiet = time.wrapping_sub(LAST_HARDWARE_KEY.load(Ordering::Relaxed)) > HARDWARE_QUIET_MS;
-    let last = LAST_IGNORED_NOTICE.load(Ordering::Relaxed);
-    let due = last == 0 || time.wrapping_sub(last) > IGNORED_NOTICE_GAP_MS;
-    if run >= IGNORED_NOTICE_AFTER && quiet && due {
-        LAST_IGNORED_NOTICE.store(time.max(1), Ordering::Relaxed);
-        crate::tray::on_ui(crate::tray::UI_IGNORED_KEYS);
-    }
-}
-
-static HOTKEYS_SEEN: AtomicU32 = AtomicU32::new(0);
-
-/// Has the hook received this hotkey since RightType started? The welcome
-/// window ticks the hotkeys off as they are tried.
-pub fn hotkey_seen(action: Action) -> bool {
-    HOTKEYS_SEEN.load(Ordering::Relaxed) & (1 << action as u32) != 0
-}
-
 /// Is CapsLock currently toggled on?
 unsafe fn caps_on() -> bool {
     (GetKeyState(VK_CAPITAL.0 as i32) & 0x0001) != 0
@@ -1682,18 +1611,9 @@ unsafe extern "system" fn ll_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> 
         }
         // Skip anything we generated: our tag is authoritative and timing-free.
         let externally_injected = (kb.flags.0 & LLKHF_INJECTED.0) != 0;
-        // Keys other programs send are not typing: a password manager's
-        // auto-type must never reach the word buffer. Two kinds are still
-        // wanted (see `injected_wanted`).
-        let injected_ignored = externally_injected
-            && kb.dwExtraInfo != INJECT_TAG
-            && !debug_e2e_accepts_injected()
-            && !injected_wanted(kb);
-        if wparam.0 as u32 == WM_KEYDOWN && kb.dwExtraInfo != INJECT_TAG {
-            note_key_source(injected_ignored, !externally_injected, kb.time);
-        }
-        let ours =
-            kb.dwExtraInfo == INJECT_TAG || injected_ignored || INJECTING.load(Ordering::Relaxed);
+        let ours = kb.dwExtraInfo == INJECT_TAG
+            || (externally_injected && !debug_e2e_accepts_injected())
+            || INJECTING.load(Ordering::Relaxed);
         if ours && wparam.0 as u32 == WM_KEYDOWN {
             e2e_trace(format!(
                 "key vk={:#x} skipped (tag={} injecting={})",
@@ -2462,9 +2382,6 @@ unsafe fn process(msg: u32, kb: &KBDLLHOOKSTRUCT) -> bool {
         return swallow;
     }
     let action = hotkeys().action_for(vk, is_down(VK_CONTROL), is_down(VK_SHIFT), is_down(VK_MENU));
-    if let Some(a) = action {
-        HOTKEYS_SEEN.fetch_or(1 << a as u32, Ordering::Relaxed);
-    }
     if !is_modifier(vk) && is_down(VK_SHIFT) && (is_down(VK_CONTROL) || is_down(VK_MENU)) {
         let hkl = STATE.with(|s| s.borrow().last_hkl);
         SHORTCUT.with(|c| c.set(Some((Instant::now(), hkl))));
@@ -4632,10 +4549,8 @@ unsafe fn classify(vk: u16, scan: u16) -> Option<Key> {
     if vk == VK_BACK.0 {
         return Some(Key::Backspace);
     }
-    // Characters sent as Unicode packets (remote tools, test drivers): taken
-    // only for RightType's own windows. Elsewhere they are what a password
-    // manager's auto-type looks like.
-    if vk == VK_PACKET.0 && (debug_e2e_accepts_injected() || foreground_is_own()) {
+    #[cfg(debug_assertions)]
+    if vk == VK_PACKET.0 && debug_e2e_accepts_injected() {
         return char::from_u32(scan as u32).map(Key::Char);
     }
     if vk == VK_SPACE.0 || vk == VK_RETURN.0 || vk == VK_TAB.0 {

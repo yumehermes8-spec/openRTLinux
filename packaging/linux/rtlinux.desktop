@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=RightType (Linux port)
-Name[th]=RightType (พอร์ต Linux)
+Name=openRTLinux
+Name[th]=openRTLinux
 GenericName=Thai/English layout fixer
 GenericName[th]=ตัวแก้พิมพ์ผิดแป้น ไทย/อังกฤษ
 Comment=Fix Thai/English text typed on the wrong keyboard layout
