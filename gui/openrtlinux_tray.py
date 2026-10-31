@@ -18,6 +18,7 @@ Talks to the daemon on `/run/user/$UID/openrtlinux.sock`; writes
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import socket
@@ -40,6 +41,28 @@ except Exception:  # pragma: no cover - depends on the machine
     HAVE_TRAY = False
 
 APP = "openrtlinux"
+LOCK_PATH = Path(
+    os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+) / f"{APP}-tray.lock"
+
+
+def claim_single_instance() -> "int | None":
+    """One tray per session.
+
+    Two copies means two icons in the panel, and two copies is exactly what happens
+    when a login starts the tray by more than one route (the user service *and* an
+    XDG autostart entry, say). The lock is held for as long as the process lives, so
+    a second copy simply exits instead of drawing a second icon.
+    """
+    fd = os.open(LOCK_PATH, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    os.ftruncate(fd, 0)
+    os.write(fd, str(os.getpid()).encode())
+    return fd
 ICON_ON = "openrtlinux"
 ICON_OFF = "openrtlinux-off"
 # the chords a person can pick for "fix the word under the cursor"
@@ -335,22 +358,33 @@ def toml_dump(data: dict) -> str:
 
 
 def apply_autostart(enabled: bool) -> str:
-    target = Path.home() / ".config" / "autostart" / "openrtlinux-tray.desktop"
-    if not enabled:
-        if target.exists():
-            target.unlink()
-        return "autostart off"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    source = Path(__file__).resolve().parent / "openrtlinux-tray.desktop"
-    if source.exists():
-        target.write_text(source.read_text())
-    else:
+    """Start the tray at login - through the user service, which now owns it.
+
+    This used to write an XDG autostart entry while the service unit was also
+    enabled: logging in started the tray twice, and two trays mean two icons.
+    """
+    unit = "openrtlinux-tray.service"
+    legacy = Path.home() / ".config" / "autostart" / "openrtlinux-tray.desktop"
+    if legacy.exists():
+        legacy.unlink()  # the unit replaced this; keeping both starts two copies
+    action = "enable" if enabled else "disable"
+    try:
+        subprocess.run(
+            ["systemctl", "--user", action, "--now", unit],
+            check=True, capture_output=True, timeout=15,
+        )
+        return f"systemd: {unit} {action}d"
+    except Exception as why:  # no systemd user session: fall back to autostart
+        target = legacy
+        if not enabled:
+            return f"autostart off ({why})"
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
             "[Desktop Entry]\nType=Application\nName=openRTLinux tray\n"
             f"Exec={sys.executable} {Path(__file__).resolve()}\n"
             "Icon=openrtlinux\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
         )
-    return f"autostart on ({target})"
+        return f"autostart on ({target})"
 
 
 # ----------------------------------------------------------------------- tray
@@ -505,6 +539,10 @@ def main() -> int:
         window.connect("destroy", Gtk.main_quit)
         window.show_all()
     else:
+        holder = claim_single_instance()
+        if holder is None:
+            print("openRTLinux tray is already running - not starting a second one")
+            return 0
         tray = Tray()
         if args.window:
             tray.on_settings()
