@@ -74,6 +74,7 @@ bash packaging/linux/install.sh --release --with-tray
 
 | ช่อง | ความหมาย |
 | --- | --- |
+| **ภาษา / Language** | ภาษาของหน้าตั้งค่าและเมนูถาด: **ไทย** · **English** · **ตามระบบ** — ไม่กระทบการทำงานของโปรแกรมเลย ( foreigners can run it in English on a Thai Ubuntu ) |
 | โหมด | `auto` / `manual` / `off` |
 | โหมดทดลอง (dry-run) | ตัดสินใจและบันทึกให้ดู แต่**ไม่พิมพ์/ไม่สลับแป้น** |
 | hotkey แก้คำ | Shift+Backspace หรือ Shift+Spacebar |

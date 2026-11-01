@@ -72,6 +72,21 @@ HOTKEYS = [
 ]
 
 
+def toml_value(path: Path, key: str, default: object) -> object:
+    """One key out of config.toml without building anything (the language needs it
+    before the first label exists)."""
+    try:
+        return tomllib.loads(path.read_text()).get(key, default)
+    except Exception:
+        return default
+
+
+def normalise_language(text: object) -> str:
+    """Whatever the config says -> a key of LANGUAGE_SETTINGS."""
+    choice = str(text or "system").strip().lower()
+    return choice if choice in ("system", "th", "en") else "system"
+
+
 def normalise_hotkey(text: object) -> str:
     """Whatever the config says -> one of HOTKEYS."""
     raw = str(text or "").lower().replace(" ", "").replace("_", "")
@@ -86,9 +101,116 @@ CONFIG_PATH = Path(
     os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
 ) / APP / "config.toml"
 SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"{APP}.sock"
-MODE_LABELS = {"auto": "แก้เองเมื่อเคาะวรรค (auto)",
-               "manual": "แก้เมื่อกด hotkey (manual)",
-               "off": "ปิดการแก้ (off)"}
+# ---------------------------------------------------------------- languages
+# The settings window and the tray menu speak Thai or English. The *behaviour* is
+# the same either way - this only changes the words, so someone using a Thai
+# Ubuntu in another language can still find their way around.
+LANGUAGE_SETTINGS = [
+    ("system", "ตามระบบ / Follow system"),
+    ("th", "ไทย / Thai"),
+    ("en", "English / English"),
+]
+
+TEXTS = {
+    "th": {
+        "window_title": "openRTLinux — ตั้งค่า",
+        "language": "ภาษา",
+        "language_tip": "ภาษาของหน้าตั้งค่าและเมนูถาด (การทำงานเหมือนกันทุกภาษา)",
+        "mode": "โหมด",
+        "dry_run": "โหมดทดลอง — ตัดสินใจและบันทึก แต่ไม่พิมพ์/ไม่สลับแป้น",
+        "hotkey": "hotkey แก้คำ",
+        "hotkey_tip": "คอร์ดที่กดแล้วแก้คำใต้เคอร์เซอร์ — Shift+Spacebar จะลบวรรคที่เกิดขึ้นให้ด้วย",
+        "switch_key": "ปุ่มสลับแป้นของเดสก์ท็อป",
+        "current_command": "คำสั่งอ่านแป้นปัจจุบัน",
+        "autostart": "เปิด tray อัตโนมัติเมื่อ login",
+        "note": ("<small>หมายเหตุ: พอร์ตนี้แก้คำเมื่อเคาะวรรค (auto) และเมื่อกด hotkey (manual) — "
+                 "ฟีเจอร์ที่ต้องอ่านข้อความจากแอป (ghost suggestion, per-app) ยังไม่ได้ทำบน Wayland</small>"),
+        "save": "บันทึกแล้วโหลดใหม่",
+        "refresh": "รีเฟรชสถานะ",
+        "saved": "บันทึกแล้ว — ",
+        "reachable_no": "ทักไดมอนไม่ได้",
+        "daemon_off": "daemon: ไม่ได้ทำงาน",
+        "dry": "⚠ ทดลอง — ไม่พิมพ์ (ปิดสวิตช์ 'โหมดทดลอง' เพื่อให้แก้จริง)",
+        "real": "แก้จริง",
+        "layout_th": "ไทย",
+        "layout_en": "อังกฤษ",
+        "committed": "แก้ไป {n} ครั้ง",
+        "mode_auto": "แก้เองเมื่อเคาะวรรค (auto)",
+        "mode_manual": "แก้เมื่อกด hotkey (manual)",
+        "mode_off": "ปิดการแก้ (off)",
+        "tray_dry": "โหมดทดลอง (ไม่พิมพ์จริง)",
+        "tray_start": "เริ่ม daemon",
+        "tray_settings": "ตั้งค่า…",
+        "tray_log": "ดู log (journal)",
+        "tray_quit": "หยุด daemon",
+        "tray_exit": "ปิด tray นี้",
+        "notify": "เริ่มแก้จริงแล้ว — จะพิมพ์/สลับแป้นให้",
+    },
+    "en": {
+        "window_title": "openRTLinux — Settings",
+        "language": "Language",
+        "language_tip": "Language of the settings window and the tray menu (behaviour is the same either way)",
+        "mode": "Mode",
+        "dry_run": "Dry run — decide and log, but do not type or switch the layout",
+        "hotkey": "Fix hotkey",
+        "hotkey_tip": "The chord that fixes the word under the cursor — Shift+Spacebar also removes the space it types",
+        "switch_key": "Desktop switch key",
+        "current_command": "Read the active layout with",
+        "autostart": "Start the tray at login",
+        "note": ("<small>Note: this port fixes a word on a boundary (auto) and on the fix hotkey "
+                 "(manual) — features that need to read text from the app (ghost suggestion, "
+                 "per-app rules) are not on Wayland yet</small>"),
+        "save": "Save and reload",
+        "refresh": "Refresh status",
+        "saved": "Saved — ",
+        "reachable_no": "cannot reach the daemon",
+        "daemon_off": "daemon: not running",
+        "dry": "⚠ dry run — not typing (turn off \"Dry run\" to fix for real)",
+        "real": "fixing",
+        "layout_th": "Thai",
+        "layout_en": "English",
+        "committed": "fixed {n} time(s)",
+        "mode_auto": "Fix on space or Enter (auto)",
+        "mode_manual": "Fix on the hotkey (manual)",
+        "mode_off": "Off",
+        "tray_dry": "Dry run (do not type)",
+        "tray_start": "Start the daemon",
+        "tray_settings": "Settings…",
+        "tray_log": "View log (journal)",
+        "tray_quit": "Stop the daemon",
+        "tray_exit": "Close this tray",
+        "notify": "Now fixing for real — keys and the layout will change",
+    },
+}
+
+LANG = "th"
+# set by --lang: a one-off choice that outranks whatever the config says
+LANG_OVERRIDE: "str | None" = None
+
+
+def system_language() -> str:
+    """Thai if the session speaks Thai, English otherwise."""
+    for name in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
+        value = os.environ.get(name, "")
+        if value:
+            return "th" if value.lower().startswith("th") else "en"
+    return "en"
+
+
+def resolve_language(setting: object) -> str:
+    choice = str(setting or "system").strip().lower()
+    if choice in ("th", "en"):
+        return choice
+    return system_language()
+
+
+def t(key: str, **fmt: object) -> str:
+    text = TEXTS.get(LANG, TEXTS["th"]).get(key) or TEXTS["th"].get(key, key)
+    return text.format(**fmt) if fmt else text
+
+
+def mode_label(key: str) -> str:
+    return t({"auto": "mode_auto", "manual": "mode_manual", "off": "mode_off"}.get(key, key))
 
 
 # --------------------------------------------------------------------- daemon
@@ -161,21 +283,19 @@ def gsettings(command: str) -> str:
 
 def describe(status: dict) -> str:
     if "error" in status:
-        return "daemon: ไม่ได้ทำงาน"
-    mode = MODE_LABELS.get(status.get("mode", "?"), status.get("mode", "?"))
-    switch = "⚠ ทดลอง — ไม่พิมพ์ (ปิดสวิตช์ 'โหมดทดลอง' เพื่อให้แก้จริง)" if status.get("dry_run") else "แก้จริง"
-    layout = "ไทย" if status.get("layout") == "thai" else "อังกฤษ"
-    return (
-        f"{mode} · {switch} · แป้น: {layout} · "
-        f"แก้ไป {status.get('committed', 0)} ครั้ง"
-    )
+        return t("daemon_off")
+    mode = mode_label(status.get("mode", "?"))
+    switch = t("dry") if status.get("dry_run") else t("real")
+    layout = t("layout_th") if status.get("layout") == "thai" else t("layout_en")
+    return f"{mode} · {switch} · {layout} · {t('committed', n=status.get('committed', 0))}"
 
 
 # ------------------------------------------------------------------ settings
 class SettingsWindow(Gtk.Window):
     def __init__(self, tray=None) -> None:
-        super().__init__(title="openRTLinux — ตั้งค่า")
+        super().__init__(title=t("window_title"))
         self.tray = tray
+        self.labels: dict[str, object] = {}
         self.set_default_size(560, 380)
         self.set_border_width(12)
 
@@ -192,40 +312,50 @@ class SettingsWindow(Gtk.Window):
         box.pack_start(grid, False, False, 0)
         row = 0
 
+        self.lang = Gtk.ComboBoxText()
+        for key, label in LANGUAGE_SETTINGS:
+            self.lang.append(key, label)
+        self.lang.set_tooltip_text(t("language_tip"))
+        self.lang.connect("changed", self.on_language)
+        self.labels["language"] = label_start(t("language"))
+        grid.attach(self.labels["language"], 0, row, 1, 1)
+        grid.attach(self.lang, 1, row, 1, 1)
+        row += 1
+
         self.mode = Gtk.ComboBoxText()
         for key in ("auto", "manual", "off"):
-            self.mode.append(key, MODE_LABELS[key])
-        grid.attach(label_start("โหมด"), 0, row, 1, 1)
+            self.mode.append(key, mode_label(key))
+        self.labels["mode"] = label_start(t("mode"))
+        grid.attach(self.labels["mode"], 0, row, 1, 1)
         grid.attach(self.mode, 1, row, 1, 1)
         row += 1
 
-        self.dry_run = Gtk.CheckButton(
-            label="โหมดทดลอง — ตัดสินใจและบันทึก แต่ไม่พิมพ์/ไม่สลับแป้น"
-        )
+        self.dry_run = Gtk.CheckButton(label=t("dry_run"))
         grid.attach(self.dry_run, 1, row, 1, 1)
         row += 1
 
         self.hotkey = Gtk.ComboBoxText()
         for key, label in HOTKEYS:
             self.hotkey.append(key, label)
-        self.hotkey.set_tooltip_text(
-            "คอร์ดที่กดแล้วแก้คำใต้เคอร์เซอร์ — Shift+Spacebar จะลบวรรคที่เกิดขึ้นให้ด้วย"
-        )
-        grid.attach(label_start("hotkey แก้คำ"), 0, row, 1, 1)
+        self.hotkey.set_tooltip_text(t("hotkey_tip"))
+        self.labels["hotkey"] = label_start(t("hotkey"))
+        grid.attach(self.labels["hotkey"], 0, row, 1, 1)
         grid.attach(self.hotkey, 1, row, 1, 1)
         row += 1
 
         self.switch_key = Gtk.Entry()
-        grid.attach(label_start("ปุ่มสลับแป้นของเดสก์ท็อป"), 0, row, 1, 1)
+        self.labels["switch_key"] = label_start(t("switch_key"))
+        grid.attach(self.labels["switch_key"], 0, row, 1, 1)
         grid.attach(self.switch_key, 1, row, 1, 1)
         row += 1
 
         self.current_command = Gtk.Entry()
-        grid.attach(label_start("คำสั่งอ่านแป้นปัจจุบัน"), 0, row, 1, 1)
+        self.labels["current_command"] = label_start(t("current_command"))
+        grid.attach(self.labels["current_command"], 0, row, 1, 1)
         grid.attach(self.current_command, 1, row, 1, 1)
         row += 1
 
-        self.autostart = Gtk.CheckButton(label="เปิด tray อัตโนมัติเมื่อ login")
+        self.autostart = Gtk.CheckButton(label=t("autostart"))
         grid.attach(self.autostart, 1, row, 1, 1)
         row += 1
 
@@ -233,19 +363,19 @@ class SettingsWindow(Gtk.Window):
         hint.set_xalign(0)
         hint.set_halign(Gtk.Align.START)
         hint.set_line_wrap(True)
-        hint.set_markup(
-            "<small>หมายเหตุ: พอร์ตนี้ยังทำได้แค่แก้คำเมื่อเคาะวรรค (auto) และกด "
-            "Shift+Backspace (manual) — ฟีเจอร์ที่ต้องอ่านข้อความจากแอป "
-            "(ghost suggestion, per-app) ยังไม่ได้ทำบน Wayland</small>"
+        self.hint = hint
+        hint.set_markup(t("note")
         )
         box.pack_start(hint, False, False, 0)
 
         buttons = Gtk.Box(spacing=8)
         box.pack_end(buttons, False, False, 0)
-        save = Gtk.Button(label="บันทึกแล้วโหลดใหม่")
+        save = Gtk.Button(label=t("save"))
+        self.labels["save"] = save
         save.connect("clicked", self.on_save)
         buttons.pack_end(save, False, False, 0)
-        refresh = Gtk.Button(label="รีเฟรชสถานะ")
+        refresh = Gtk.Button(label=t("refresh"))
+        self.labels["refresh"] = refresh
         refresh.connect("clicked", lambda *_: self.reload_status())
         buttons.pack_end(refresh, False, False, 0)
 
@@ -255,7 +385,7 @@ class SettingsWindow(Gtk.Window):
 
     # ---- config file
     @staticmethod
-    def defaults(self=None) -> dict:
+    def defaults(self=None) -> dict:  # noqa: D401
         return {
             "mode": "auto",
             "dry_run": True,
@@ -268,7 +398,7 @@ class SettingsWindow(Gtk.Window):
             "fix_word_hotkey": "shift+backspace",
         }
 
-    def load_config(self) -> None:
+    def load_config(self) -> None:  # noqa: D401
         data = dict(self.defaults())
         try:
             import tomllib  # python 3.11+
@@ -279,14 +409,47 @@ class SettingsWindow(Gtk.Window):
         self.config = data
         self.mode.set_active_id(str(data.get("mode", "auto")))
         self.dry_run.set_active(bool(data.get("dry_run", True)))
+        global LANG
+        chosen = LANG_OVERRIDE or data.get("ui_language", "system")
+        self.lang.set_active_id(normalise_language(chosen))
+        LANG = resolve_language(chosen)
         self.hotkey.set_active_id(normalise_hotkey(data.get("fix_word_hotkey", "shift+backspace")))
         self.switch_key.set_text(str(data.get("switch_command", "")))
         self.current_command.set_text(str(data.get("current_command", "")))
         self.autostart.set_active(bool(data.get("tray_autostart", False)))
 
+    def on_language(self, *_args) -> None:
+        """Preview the choice at once; saving is what stores it."""
+        global LANG
+        LANG = resolve_language(self.lang.get_active_id())
+        self.retranslate()
+
+    def retranslate(self) -> None:
+        """Say everything again in the chosen language."""
+        self.set_title(t("window_title"))
+        self.lang.set_tooltip_text(t("language_tip"))
+        for key, widget in self.labels.items():
+            widget.set_text(t(key))
+        self.dry_run.set_label(t("dry_run"))
+        self.autostart.set_label(t("autostart"))
+        self.hotkey.set_tooltip_text(t("hotkey_tip"))
+        self.hint.set_markup(t("note"))
+        chosen = self.mode.get_active_id()
+        self.mode.remove_all()
+        for key in ("auto", "manual", "off"):
+            self.mode.append(key, mode_label(key))
+        if chosen:
+            self.mode.set_active_id(chosen)
+        if self.tray is not None:
+            self.tray.retranslate()
+        self.reload_status()
+
     def on_save(self, *_args) -> None:
         self.config["mode"] = self.mode.get_active_id() or "auto"
         self.config["dry_run"] = self.dry_run.get_active()
+        global LANG
+        self.config["ui_language"] = self.lang.get_active_id() or "system"
+        LANG = resolve_language(self.config["ui_language"])
         self.config["fix_word_hotkey"] = self.hotkey.get_active_id() or "shift+backspace"
         self.config["switch_command"] = self.switch_key.get_text()
         self.config["current_command"] = self.current_command.get_text()
@@ -299,7 +462,7 @@ class SettingsWindow(Gtk.Window):
         ask(f"set mode {self.config['mode']}")
         ask(f"set dry_run {str(self.config['dry_run']).lower()}")
         self.status.set_text(
-            "บันทึกแล้ว — " + json.dumps(result, ensure_ascii=False)
+            t("saved") + json.dumps(result, ensure_ascii=False)
         )
         if self.tray is not None:
             self.tray.refresh()
@@ -388,6 +551,9 @@ def apply_autostart(enabled: bool) -> str:
 
 
 # ----------------------------------------------------------------------- tray
+def shlex_quote(text: str) -> str:
+    return "'" + text.replace("'", "'\\''") + "'"
+
 class Tray:
     def __init__(self) -> None:
         self.indicator = AppIndicator.Indicator.new(
@@ -404,7 +570,7 @@ class Tray:
         self.mode_items = {}
         group = None
         for key in ("auto", "manual", "off"):
-            item = Gtk.RadioMenuItem(label=MODE_LABELS[key])
+            item = Gtk.RadioMenuItem(label=mode_label(key))
             if group is None:
                 group = item
             else:
@@ -414,27 +580,31 @@ class Tray:
             self.mode_items[key] = item
         self.menu.append(Gtk.SeparatorMenuItem())
 
-        self.dry_item = Gtk.CheckMenuItem(label="โหมดทดลอง (ไม่พิมพ์จริง)")
+        self.dry_item = Gtk.CheckMenuItem(label=t("tray_dry"))
         self.dry_item.connect("activate", self.on_dry_run)
         self.menu.append(self.dry_item)
 
-        self.start_item = Gtk.MenuItem(label="เริ่ม daemon")
+        self.start_item = Gtk.MenuItem(label=t("tray_start"))
         self.start_item.connect("activate", self.on_start)
         self.menu.append(self.start_item)
 
-        settings_item = Gtk.MenuItem(label="ตั้งค่า…")
+        self.settings_item = Gtk.MenuItem(label=t("tray_settings"))
+        settings_item = self.settings_item
         settings_item.connect("activate", self.on_settings)
         self.menu.append(settings_item)
 
-        log_item = Gtk.MenuItem(label="ดู log (journal)")
+        self.log_item = Gtk.MenuItem(label=t("tray_log"))
+        log_item = self.log_item
         log_item.connect("activate", self.on_log)
         self.menu.append(log_item)
         self.menu.append(Gtk.SeparatorMenuItem())
 
-        quit_item = Gtk.MenuItem(label="หยุด daemon")
+        self.quit_item = Gtk.MenuItem(label=t("tray_quit"))
+        quit_item = self.quit_item
         quit_item.connect("activate", self.on_quit_daemon)
         self.menu.append(quit_item)
-        exit_item = Gtk.MenuItem(label="ปิด tray นี้")
+        self.exit_item = Gtk.MenuItem(label=t("tray_exit"))
+        exit_item = self.exit_item
         exit_item.connect("activate", lambda *_: Gtk.main_quit())
         self.menu.append(exit_item)
 
@@ -443,6 +613,16 @@ class Tray:
         self.window = None
         self.refresh()
         GLib.timeout_add(2000, self.refresh)
+
+    def retranslate(self) -> None:
+        """Say the menu again in the chosen language."""
+        self.indicator.set_title("openRTLinux")
+        self.dry_item.set_label(t("tray_dry"))
+        self.start_item.set_label(t("tray_start"))
+        self.settings_item.set_label(t("tray_settings"))
+        self.log_item.set_label(t("tray_log"))
+        self.quit_item.set_label(t("tray_quit"))
+        self.exit_item.set_label(t("tray_exit"))
 
     def refresh(self) -> bool:
         status = ask("status")
@@ -478,7 +658,7 @@ class Tray:
             # say it out loud once: this is the switch that makes it act
             subprocess.Popen(
                 ["sh", "-c", "command -v notify-send >/dev/null && "
-                 "notify-send -a openRTLinux 'openRTLinux' 'เริ่มแก้จริงแล้ว — จะพิมพ์/สลับแป้นให้'"],
+                 "notify-send -a openRTLinux 'openRTLinux' " + shlex_quote(t("notify"))],
                 start_new_session=True,
             )
 
@@ -516,7 +696,14 @@ def main() -> int:
     parser.add_argument("--no-tray", action="store_true", help="window only, no tray icon")
     parser.add_argument("--report", action="store_true", help="print status and exit")
     parser.add_argument("--selftest", action="store_true", help="build the widgets, then exit")
+    parser.add_argument("--lang", choices=["system", "th", "en"], help="UI language for this run")
     args = parser.parse_args()
+
+    # the language has to be known before any label is built
+    global LANG, LANG_OVERRIDE
+    LANG_OVERRIDE = args.lang
+    stored = toml_value(CONFIG_PATH, "ui_language", "system")
+    LANG = resolve_language(args.lang or stored)
 
     if args.report:
         status = ask("status")
@@ -530,6 +717,8 @@ def main() -> int:
         if HAVE_TRAY and not args.no_tray:
             tray = Tray()
         print("widgets built OK")
+        print(f"  language: {LANG} ({'override' if args.lang else 'from config/environment'})")
+        print(f"  sample: {t('window_title')} | {t('save')} | {mode_label('manual')}")
         print(f"  gate: GTK3 yes · tray {'yes' if tray else 'no'} · config {CONFIG_PATH}")
         print(f"  socket: {SOCKET_PATH} · {describe(ask('status'))}")
         return 0
