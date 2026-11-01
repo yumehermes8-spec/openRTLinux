@@ -1,5 +1,18 @@
 # Plan: ghost suggestions / palette, and focused-app rules
 
+> ## Status: **parked** (not being built)
+>
+> Reviewed and declined for now: a GNOME Shell extension is a long way from how the same
+> features are done on Windows (a normal application may hook the keyboard, read the focused
+> control and draw its own window) and on macOS — on Wayland none of that is allowed, and the
+> extension would be code living inside the compositor, where a mistake can freeze the whole
+> desktop. Judged not worth the risk.
+>
+> Nothing here is implemented; the release **v0.1.0** stays as it is. If it is ever picked up,
+> start at **B1** and build/test it inside a **nested GNOME Shell session**
+> (`dbus-run-session -- gnome-shell --nested --wayland`), which keeps the real desktop out of
+> the blast radius entirely.
+
 Two features asked for after the first release. Both come down to the same missing piece:
 **on Wayland, no ordinary application can see which window has focus, and none can draw over
 another window.** Both need one small **GNOME Shell extension** — code that runs *inside* the
