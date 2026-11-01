@@ -472,7 +472,11 @@ class SettingsWindow(Gtk.Window):
         self.set_title(t("window_title"))
         self.lang.set_tooltip_text(t("language_tip"))
         for key, widget in self.labels.items():
-            widget.set_text(t(key))
+            # the save/refresh entries are buttons: same idea, different method
+            if isinstance(widget, Gtk.Button):
+                widget.set_label(t(key))
+            else:
+                widget.set_text(t(key))
         self.dry_run.set_label(t("dry_run"))
         self.autostart.set_label(t("autostart"))
         self.hotkey.set_tooltip_text(t("hotkey_tip"))
