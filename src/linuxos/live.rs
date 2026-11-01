@@ -40,6 +40,14 @@ pub struct Committed {
     pub steps: Vec<Plan>,
 }
 
+/// A fix that can be undone: both spellings of the same word, and the boundary
+/// that was typed after it.
+struct Swap {
+    wrong: String,
+    right: String,
+    separator: String,
+}
+
 pub struct Live {
     layout: InputLayout,
     buf: WordBuffer,
@@ -54,6 +62,12 @@ pub struct Live {
     /// chord can reach us in the other order (Backspace, then Shift), and by
     /// then the buffer has already lost the character the chord was meant to eat.
     before_backspace: Option<String>,
+    /// The last automatic fix, kept so the hotkey can swap it back and forth
+    /// (`Mode::Both`): sometimes the "wrong" spelling is the one that was wanted -
+    /// a character name, a password, a joke.
+    swap: Option<Swap>,
+    /// Which side of `swap` is on screen.
+    showing_right: bool,
     pub mode: Mode,
     pub committed: usize,
     pub skipped: usize,
@@ -66,6 +80,8 @@ impl Live {
             buf: WordBuffer::new(),
             pending: None,
             before_backspace: None,
+            swap: None,
+            showing_right: false,
             mode: Mode::Auto,
             committed: 0,
             skipped: 0,
@@ -93,6 +109,8 @@ impl Live {
     }
 
     pub fn on_reset(&mut self) {
+        self.swap = None;
+        self.showing_right = false;
         self.buf.observe(Key::Reset);
     }
 
@@ -129,6 +147,11 @@ impl Live {
     pub fn on_fix_hotkey(&mut self, pre_deleted: usize) -> Option<Committed> {
         if self.mode == Mode::Off {
             return None;
+        }
+        if self.mode == Mode::Both {
+            if let Some(swapped) = self.swap_last_fix() {
+                return Some(swapped);
+            }
         }
         // The buffer is what the typist typed; the application is one character
         // behind it (its own Backspace fired first). So the decision is made on
@@ -273,7 +296,7 @@ impl Live {
     /// A boundary key (space/enter/tab). Returns the plan to run, if any.
     pub fn on_boundary(&mut self, boundary: char) -> Option<Committed> {
         let shown = self.buf.observe(Key::Boundary)?;
-        if self.mode != Mode::Auto {
+        if !matches!(self.mode, Mode::Auto | Mode::Both) {
             // manual: the word is on screen, waiting for the hotkey
             self.pending = Some((shown, boundary.to_string()));
             return None;
@@ -292,9 +315,61 @@ impl Live {
         steps.push(Plan::Type(format!("{}{}", detection.corrected, boundary)));
         self.layout = target;
         self.committed += 1;
+        if self.mode == Mode::Both {
+            // remember both spellings: the hotkey swaps between them
+            self.swap = Some(Swap {
+                wrong: shown.clone(),
+                right: detection.corrected.clone(),
+                separator: boundary.to_string(),
+            });
+            self.showing_right = true;
+        }
+        self.pending = Some((detection.corrected.clone(), boundary.to_string()));
         Some(Committed {
             shown,
             corrected: detection.corrected,
+            steps,
+        })
+    }
+
+    /// `Mode::Both`: the hotkey swaps the last automatic fix back and forth.
+    ///
+    /// Returns `None` when the press is not about that word - a new word is being
+    /// typed, or the word under the cursor is not the one we just fixed - and the
+    /// ordinary "fix this word" path takes over.
+    fn swap_last_fix(&mut self) -> Option<Committed> {
+        let (from, to, separator) = {
+            let swap = self.swap.as_ref()?;
+            if !self.buf.current().is_empty() {
+                return None;
+            }
+            let expected = if self.showing_right { &swap.right } else { &swap.wrong };
+            match self.pending.as_ref() {
+                Some((word, _)) if word == expected => {}
+                _ => return None,
+            }
+            (
+                if self.showing_right { swap.right.clone() } else { swap.wrong.clone() },
+                if self.showing_right { swap.wrong.clone() } else { swap.right.clone() },
+                swap.separator.clone(),
+            )
+        };
+        let target = layout_of(&to);
+        let mut steps = Vec::new();
+        if target != self.layout {
+            steps.push(Plan::Switch(target));
+        }
+        // the hotkey's own Backspace already removed the boundary, and the word
+        // needs to go before the other spelling can be typed in its place
+        steps.push(Plan::Backspaces(from.chars().count()));
+        steps.push(Plan::Type(format!("{to}{separator}")));
+        self.layout = target;
+        self.showing_right = !self.showing_right;
+        self.pending = Some((to.clone(), separator));
+        self.committed += 1;
+        Some(Committed {
+            shown: from,
+            corrected: to,
             steps,
         })
     }
@@ -558,6 +633,70 @@ mod tests {
         }
         let committed = live.on_fix_hotkey(1).expect("not a word, so it flips");
         assert_eq!(committed.corrected, "Suvasin");
+    }
+
+    #[test]
+    fn both_mode_fixes_on_a_boundary_and_the_hotkey_swaps_it_back() {
+        let mut live = Live::new(InputLayout::UsQwerty);
+        live.mode = Mode::Both;
+        for c in "fvdw,h".chars() {
+            live.on_char(c);
+        }
+        let fixed = live.on_boundary(' ').expect("it fixes on the boundary like auto");
+        assert_eq!(fixed.corrected, "ดอกไม้");
+        assert!(matches!(fixed.steps[1], Plan::Backspaces(7)));
+
+        // the hotkey puts the "wrong" spelling back
+        let back = live.on_fix_hotkey(1).expect("the hotkey swaps it back");
+        assert_eq!(back.shown, "ดอกไม้");
+        assert_eq!(back.corrected, "fvdw,h");
+        assert!(matches!(back.steps[0], Plan::Switch(InputLayout::UsQwerty)));
+        assert!(matches!(back.steps[1], Plan::Backspaces(6)));
+        assert!(matches!(back.steps[2], Plan::Type(ref t) if t == "fvdw,h "));
+
+        // and again: it is a toggle, not a one-way undo
+        let again = live.on_fix_hotkey(1).expect("a second press swaps it forward");
+        assert_eq!(again.shown, "fvdw,h");
+        assert_eq!(again.corrected, "ดอกไม้");
+        assert!(matches!(again.steps[1], Plan::Backspaces(6)));
+        assert!(matches!(again.steps[2], Plan::Type(ref t) if t == "ดอกไม้ "));
+    }
+
+    #[test]
+    fn both_mode_still_fixes_a_word_that_was_typed_since() {
+        // a new word means the press is about *that* word, not about the swap
+        let mut live = Live::new(InputLayout::UsQwerty);
+        live.mode = Mode::Both;
+        for c in "fvdw,h".chars() {
+            live.on_char(c);
+        }
+        assert!(live.on_boundary(' ').is_some());
+        // ...and the next word is typed with the layout the fix left behind (Thai)
+        for c in "แนพพำแะ".chars() {
+            live.on_char(c);
+        }
+        let fixed = live.on_fix_hotkey(1).expect("a normal fix, mid-word");
+        assert_eq!(fixed.corrected, "correct");
+        // seven characters on screen, one already eaten by the hotkey's Backspace
+        assert!(matches!(fixed.steps[1], Plan::Backspaces(6)));
+    }
+
+    #[test]
+    fn auto_and_manual_are_untouched_by_the_new_mode() {
+        let mut auto = Live::new(InputLayout::UsQwerty);
+        auto.mode = Mode::Auto;
+        for c in "fvdw,h".chars() {
+            auto.on_char(c);
+        }
+        assert_eq!(auto.on_boundary(' ').unwrap().corrected, "ดอกไม้");
+
+        let mut manual = Live::new(InputLayout::UsQwerty);
+        manual.mode = Mode::Manual;
+        for c in "fvdw,h".chars() {
+            manual.on_char(c);
+        }
+        assert!(manual.on_boundary(' ').is_none(), "manual waits for the hotkey");
+        assert_eq!(manual.on_fix_hotkey(1).unwrap().corrected, "ดอกไม้");
     }
 
     #[test]

@@ -61,6 +61,7 @@ bash packaging/linux/install.sh --release --with-tray
 | --- | --- |
 | **auto** | แก้ให้เองทันทีที่เคาะวรรค/Enter — พิมพ์ผิดแล้วพิมพ์ต่อได้เลย |
 | **manual** | แก้เมื่อ**กด hotkey** เท่านั้น (คุมเองทั้งหมด) |
+| **both** | แก้ให้เองตอนเคาะวรรค **และ** กด hotkey เพื่อ **สลับคำล่าสุดกลับไปกลับมา** — เคาะวรรคแล้วแก้อัตโนมัติ กด Shift+Backspace ครั้งหนึ่ง = กลับไปเป็นแบบพิมพ์ผิด กดอีกครั้ง = แก้ให้ใหม่ สลับไปมาได้เรื่อย ๆ (เผื่ออยากให้บางคำ "พิมพ์ผิด" จริง ๆ เช่นชื่อตัวละคร) |
 | **off** | หยุดทำงาน (ยังดูคีย์อยู่ แต่ไม่ทำอะไร) |
 
 ### hotkey แก้คำ
@@ -220,6 +221,7 @@ Turn it on and off from the **tray icon** (right-click → Settings). Three mode
 | --- | --- |
 | **auto** | on its own as soon as you press space/Enter — type on without stopping |
 | **manual** | only when **you press the hotkey** |
+| **both** | fixes on space/Enter **and** the hotkey **swaps that word back and forth** — press it once to put the wrong spelling back, again to fix it once more (for the words you *want* to keep misspelled, a character name say) |
 | **off** | it still watches, but does nothing |
 
 ### The fix hotkey

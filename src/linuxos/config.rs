@@ -17,6 +17,8 @@ pub enum Mode {
     Auto,
     /// Only fix when asked (Shift+Backspace).
     Manual,
+    /// Fix at a boundary *and* let the hotkey swap the last fix back and forth.
+    Both,
     /// Watched but never touches anything.
     Off,
 }
@@ -26,6 +28,7 @@ impl Mode {
         match self {
             Mode::Auto => "auto",
             Mode::Manual => "manual",
+            Mode::Both => "both",
             Mode::Off => "off",
         }
     }
@@ -34,6 +37,7 @@ impl Mode {
         match text.trim().to_lowercase().as_str() {
             "auto" => Some(Mode::Auto),
             "manual" => Some(Mode::Manual),
+            "both" | "auto+hotkey" | "auto+manual" => Some(Mode::Both),
             "off" => Some(Mode::Off),
             _ => None,
         }

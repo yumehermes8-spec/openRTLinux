@@ -105,6 +105,10 @@ SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"{APP}.sock"
 # The settings window and the tray menu speak Thai or English. The *behaviour* is
 # the same either way - this only changes the words, so someone using a Thai
 # Ubuntu in another language can still find their way around.
+# the order the modes are offered in: the automatic one, the deliberate one, the
+# one that does both, then off
+MODES = ("auto", "manual", "both", "off")
+
 LANGUAGE_SETTINGS = [
     ("system", "ตามระบบ / Follow system"),
     ("th", "ไทย / Thai"),
@@ -137,6 +141,7 @@ TEXTS = {
         "committed": "แก้ไป {n} ครั้ง",
         "mode_auto": "แก้เองเมื่อเคาะวรรค (auto)",
         "mode_manual": "แก้เมื่อกด hotkey (manual)",
+        "mode_both": "แก้ทั้งสองแบบ — เคาะวรรคแก้ให้ · กด hotkey สลับกลับได้ (both)",
         "mode_off": "ปิดการแก้ (off)",
         "tray_dry": "โหมดทดลอง (ไม่พิมพ์จริง)",
         "tray_start": "เริ่ม daemon",
@@ -172,6 +177,7 @@ TEXTS = {
         "committed": "fixed {n} time(s)",
         "mode_auto": "Fix on space or Enter (auto)",
         "mode_manual": "Fix on the hotkey (manual)",
+        "mode_both": "Both — fixes on space or Enter, and the hotkey swaps that word back and forth",
         "mode_off": "Off",
         "tray_dry": "Dry run (do not type)",
         "tray_start": "Start the daemon",
@@ -210,7 +216,14 @@ def t(key: str, **fmt: object) -> str:
 
 
 def mode_label(key: str) -> str:
-    return t({"auto": "mode_auto", "manual": "mode_manual", "off": "mode_off"}.get(key, key))
+    return t(
+        {
+            "auto": "mode_auto",
+            "manual": "mode_manual",
+            "both": "mode_both",
+            "off": "mode_off",
+        }.get(key, key)
+    )
 
 
 # --------------------------------------------------------------------- daemon
@@ -323,7 +336,7 @@ class SettingsWindow(Gtk.Window):
         row += 1
 
         self.mode = Gtk.ComboBoxText()
-        for key in ("auto", "manual", "off"):
+        for key in MODES:
             self.mode.append(key, mode_label(key))
         self.labels["mode"] = label_start(t("mode"))
         grid.attach(self.labels["mode"], 0, row, 1, 1)
@@ -436,7 +449,7 @@ class SettingsWindow(Gtk.Window):
         self.hint.set_markup(t("note"))
         chosen = self.mode.get_active_id()
         self.mode.remove_all()
-        for key in ("auto", "manual", "off"):
+        for key in MODES:
             self.mode.append(key, mode_label(key))
         if chosen:
             self.mode.set_active_id(chosen)
@@ -569,7 +582,7 @@ class Tray:
 
         self.mode_items = {}
         group = None
-        for key in ("auto", "manual", "off"):
+        for key in MODES:
             item = Gtk.RadioMenuItem(label=mode_label(key))
             if group is None:
                 group = item
