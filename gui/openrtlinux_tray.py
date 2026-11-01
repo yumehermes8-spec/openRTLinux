@@ -23,6 +23,7 @@ import json
 import os
 import socket
 import subprocess
+import time
 import sys
 from pathlib import Path
 
@@ -132,6 +133,11 @@ TEXTS = {
         "save": "บันทึกแล้วโหลดใหม่",
         "refresh": "รีเฟรชสถานะ",
         "saved": "บันทึกแล้ว — ",
+        "history": "ประวัติการแก้ (ล่าสุด)",
+        "history_empty": "(รอบนี้ยังไม่มีการแก้)",
+        "undo": "ย้อนการแก้ครั้งล่าสุด",
+        "undo_tip": "ย้อนได้เฉพาะตอนที่ยังไม่ได้พิมพ์อะไรต่อหลังการแก้ครั้งล่าสุด",
+        "undoing": "กำลังย้อน… ",
         "reachable_no": "ทักไดมอนไม่ได้",
         "daemon_off": "daemon: ไม่ได้ทำงาน",
         "dry": "⚠ ทดลอง — ไม่พิมพ์ (ปิดสวิตช์ 'โหมดทดลอง' เพื่อให้แก้จริง)",
@@ -168,6 +174,11 @@ TEXTS = {
         "save": "Save and reload",
         "refresh": "Refresh status",
         "saved": "Saved — ",
+        "history": "Recent fixes",
+        "history_empty": "(nothing fixed yet in this session)",
+        "undo": "Undo the last fix",
+        "undo_tip": "Only possible while nothing has been typed since that fix",
+        "undoing": "Undoing… ",
         "reachable_no": "cannot reach the daemon",
         "daemon_off": "daemon: not running",
         "dry": "⚠ dry run — not typing (turn off \"Dry run\" to fix for real)",
@@ -381,6 +392,23 @@ class SettingsWindow(Gtk.Window):
         )
         box.pack_start(hint, False, False, 0)
 
+        # ---- what it fixed lately, and one button to put the last one back
+        self.labels["history"] = label_start(t("history"))
+        box.pack_start(self.labels["history"], False, False, 0)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(120)
+        self.history_box = Gtk.ListBox()
+        self.history_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        scroll.add(self.history_box)
+        box.pack_start(scroll, True, True, 0)
+        self.undo_button = Gtk.Button(label=t("undo"))
+        self.undo_button.set_tooltip_text(t("undo_tip"))
+        self.undo_button.set_sensitive(False)
+        self.undo_button.connect("clicked", self.on_undo)
+        box.pack_start(self.undo_button, False, False, 0)
+        self.ready = True
+
         buttons = Gtk.Box(spacing=8)
         box.pack_end(buttons, False, False, 0)
         save = Gtk.Button(label=t("save"))
@@ -435,6 +463,8 @@ class SettingsWindow(Gtk.Window):
         """Preview the choice at once; saving is what stores it."""
         global LANG
         LANG = resolve_language(self.lang.get_active_id())
+        if not getattr(self, "ready", False):
+            return  # the window is still being built; every label is already right
         self.retranslate()
 
     def retranslate(self) -> None:
@@ -447,6 +477,8 @@ class SettingsWindow(Gtk.Window):
         self.autostart.set_label(t("autostart"))
         self.hotkey.set_tooltip_text(t("hotkey_tip"))
         self.hint.set_markup(t("note"))
+        self.undo_button.set_label(t("undo"))
+        self.undo_button.set_tooltip_text(t("undo_tip"))
         chosen = self.mode.get_active_id()
         self.mode.remove_all()
         for key in MODES:
@@ -480,10 +512,41 @@ class SettingsWindow(Gtk.Window):
         if self.tray is not None:
             self.tray.refresh()
 
+    def render_history(self, status: dict) -> None:
+        """The recent fixes, newest first, exactly as the daemon reports them."""
+        if not getattr(self, "history_box", None):
+            return
+        for child in self.history_box.get_children():
+            self.history_box.remove(child)
+        items = status.get("history") or []
+        if not items:
+            row = Gtk.Label(label=t("history_empty"))
+            row.set_xalign(0)
+            row.set_sensitive(False)
+            self.history_box.add(row)
+        for item in items:
+            when = time.strftime("%H:%M:%S", time.localtime(float(item.get("at", 0))))
+            mark = "↩" if item.get("kind") == "swap" else "✓"
+            row = Gtk.Label(
+                label=f"{when}   {item.get('shown', '')} → {item.get('corrected', '')}   {mark}"
+            )
+            row.set_xalign(0)
+            row.set_selectable(True)
+            self.history_box.add(row)
+        self.history_box.show_all()
+        self.undo_button.set_sensitive(bool(status.get("can_undo")))
+
+    def on_undo(self, *_args) -> None:
+        answer = ask("undo")
+        self.status.set_text(t("undoing") + json.dumps(answer, ensure_ascii=False))
+        # the daemon does it on its next turn, then we look again
+        GLib.timeout_add(700, self.reload_status)
+
     def reload_status(self) -> bool:
         status = ask("status")
         suffix = f"  [{status['error']}]" if "error" in status else ""
         self.status.set_text(describe(status) + suffix)
+        self.render_history(status)
         return False
 
     def _tick(self) -> bool:

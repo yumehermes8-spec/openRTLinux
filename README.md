@@ -84,6 +84,8 @@ bash packaging/linux/install.sh --release --with-tray
 | ปุ่มสลับแป้นของเดสก์ท็อป | คำสั่งอ่านคีย์สลับแป้น (ค่าเริ่มต้นดึงจาก GNOME เอง) |
 | คำสั่งอ่านแป้นปัจจุบัน | คำสั่งที่ใช้ดูว่าแป้นปัจจุบันคืออะไร (gsettings) |
 | เปิดถาดอัตโนมัติเมื่อ login | ใส่ autostart ให้ |
+| ประวัติการแก้ | รายการที่แก้ไปล่าสุด 20 ครั้ง (เวลา · คำที่พิมพ์ → คำที่แก้ให้) — ดูย้อนหลังได้ |
+| ย้อนการแก้ครั้งล่าสุด | ปุ่มคืนคำที่เพิ่งแก้ให้ กลับไปเป็นแบบที่พิมพ์ (ใช้ได้เฉพาะตอนที่ยังไม่ได้พิมพ์อะไรต่อหลังการแก้นั้น) |
 
 แก้แล้วกดบันทึก → ไดมอนรับค่าใหม่ทันที (ไม่ต้องรีสตาร์ท)
 
@@ -101,7 +103,7 @@ bash packaging/linux/install.sh --release --with-tray
 **แก้ได้แค่ไหน** (วัดจากพจนานุกรมทั้งสองภาษาจริง — ดู `tests/short_words.rs`)
 
 * **1 ตัวอักษร** — แก้ให้เสมอ (อ่านอีกแป้น) ยกเว้นตัวเลข/สัญลักษณ์ที่เหมือนกันทั้งสองแป้น
-* **2–3 ตัวอักษร** — กด hotkey แล้วแก้ให้ (พจนานุกรมตัดสินคำสั้นไม่ได้จริง)
+* **2–3 ตัวอักษร** — แก้ให้ทั้งตอนเคาะวรรค (auto) และตอนกด hotkey — เดิม auto ไม่กล้าแก้คำสั้น (ได้แค่ 50%/65%) ตอนนี้ใช้ "ความเห็นที่สอง" (อีกแป้นอ่านแล้วเป็นคำจริง · ที่จอบนไม่ใช่คำ) → **71%/96%** และวัดจากพจนานุกรมทั้งสองภาษาแล้ว**ไม่มีคำที่พิมพ์ถูกถูกแก้ผิดเลย**
 * **4 ตัวขึ้นไป** — แก้เมื่ออีกแป้นอ่านแล้วเป็นคำในพจนานุกรม (แม่น ~100%) และ**ไม่แตะคำที่พิมพ์ถูกอยู่แล้ว**
 * โหมด `auto` ใช้เกณฑ์พจนานุกรมเท่านั้น (เข้มกว่า) เพราะไม่มีใครสั่ง
 
@@ -245,6 +247,8 @@ already pressed space.
 | Desktop switch key | The command that reads your switch-layout keybinding (taken from GNOME by default) |
 | Read the active layout with | The command used to see which layout is active (gsettings) |
 | Start the tray at login | Enables the user service |
+| Recent fixes | The last 20 fixes (time · typed → corrected), as a list |
+| Undo the last fix | Puts the newest fix back to what was typed (only while nothing has been typed since) |
 
 Saving reloads the daemon immediately — no restart needed.
 
@@ -263,8 +267,10 @@ Saving reloads the daemon immediately — no restart needed.
 
 * **1 character** — always fixed (read in the other layout), except digits and
   punctuation that are identical in both layouts;
-* **2–3 characters** — fixed when the hotkey is pressed: no dictionary can judge a
-  token that short;
+* **2–3 characters** — fixed both on a boundary (`auto`) and on the hotkey: the word
+  checker alone would only get 50%/65% of them, so it now takes the same second opinion a
+  deliberate press gets (the other layout reads as a word, the screen's reading is not):
+  **71%/96%**, with no word typed correctly ever flipped (measured over both dictionaries);
 * **4 characters and up** — fixed when the other layout's reading is a word in the
   dictionary (~100% accurate), and a word that is already correct is never touched;
 * **auto** mode only uses the dictionary test (stricter), because nobody asked.
