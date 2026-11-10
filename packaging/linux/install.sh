@@ -47,10 +47,14 @@ fi
 
 echo "== installing =="
 install -Dm755 "${REPO}/target/${PROFILE}/openrtlinux" "${BIN_DIR}/openrtlinux"
+# both states: the tray asks for `openrtlinux-off` whenever the daemon is stopped,
+# and an icon that was never installed is a blank square in the panel
 for size in 16 22 24 32 48 64 128 256 512; do
-  src="${HERE}/hicolor/${size}x${size}/apps/openrtlinux.png"
-  [[ -f "${src}" ]] || continue
-  install -Dm644 "${src}" "${ICON_ROOT}/${size}x${size}/apps/openrtlinux.png"
+  for name in openrtlinux openrtlinux-off; do
+    src="${HERE}/hicolor/${size}x${size}/apps/${name}.png"
+    [[ -f "${src}" ]] || continue
+    install -Dm644 "${src}" "${ICON_ROOT}/${size}x${size}/apps/${name}.png"
+  done
 done
 [[ -f "${HERE}/hicolor/scalable/apps/openrtlinux.svg" ]] && \
   install -Dm644 "${HERE}/hicolor/scalable/apps/openrtlinux.svg" \
@@ -100,7 +104,7 @@ fi
 
 echo "== done =="
 echo "binary : ${BIN_DIR}/openrtlinux  (needs ${BIN_DIR} on PATH)"
-echo "icon   : ${ICON_ROOT}/{16x16..512x512}/apps/openrtlinux.png + scalable/apps/openrtlinux.svg"
+echo "icon   : ${ICON_ROOT}/{16x16..512x512}/apps/openrtlinux{,-off}.png + scalable/apps/openrtlinux.svg"
 echo "menu   : ${APP_DIR}/openrtlinux-tray.desktop  (the only entry shown in Activities;"
 echo "         ${APP_DIR}/openrtlinux.desktop is NoDisplay - the daemon runs as a service)"
 echo "tray   : ${BIN_DIR}/openrtlinux-tray  (${APP_DIR}/openrtlinux-tray.desktop)"

@@ -1,20 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <!-- Mirrors packaging/linux/make_icons.py: the project's rounded tile with the
-       two scripts it exists to exchange. Text is kept as text so it stays sharp
-       at any size; the .ttf used at build time is named in the generator. -->
+  <!-- Mirrors packaging/linux/make_icons.py: the project's rounded blue tile with
+       the key the program lives behind. The arrow is a filled path, not a font
+       glyph, so it stays a shape at 16 px; the SVG is the same mark the PNGs are
+       drawn from, kept here for anything that scales further. -->
   <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4CC2FF"/>
-      <stop offset="1" stop-color="#005FB8"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#2E8BE6"/>
+      <stop offset="1" stop-color="#0A3D7A"/>
     </linearGradient>
   </defs>
-  <rect x="10" y="10" width="236" height="236" rx="61" fill="url(#tile)"/>
-  <text x="84" y="118" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="118"
-        font-weight="700" fill="#ffffff" text-anchor="middle">A</text>
-  <text x="172" y="176" font-family="Noto Looped Thai, Waree, Garuda, sans-serif"
-        font-size="128" font-weight="700" fill="#ffffff" text-anchor="middle">&#3585;</text>
-  <path d="M 77 106 A 51 56 0 0 0 179 141" fill="none" stroke="#ffffff"
-        stroke-opacity="0.75" stroke-width="6"/>
-  <path d="M 179 128 l 14 14 l -26 6 z" fill="#ffffff"/>
+  <rect width="256" height="256" rx="58" fill="url(#tile)"/>
+  <rect x="44" y="168" width="168" height="26" rx="13" fill="#08203c" fill-opacity="0.55"/>
+  <rect x="44" y="50" width="168" height="132" rx="30" fill="#EAF4FF"/>
+  <path d="M128 74 L176 132 H150 V166 H106 V132 H80 Z" fill="#0A57A8"/>
 </svg>

@@ -119,12 +119,31 @@ behind (and an orphan that kept typing when the tray died).
 4. **Icons and a menu entry exist now** (`packaging/linux/`): `make_icons.py`
    draws 16-512 px PNGs (per size, never scaled down) plus `openrtlinux.svg` and the
    grey `--variant off` tile, `openrtlinux.desktop` names the app in Thai and English,
-   and `install.sh` copies both into `~/.local/share/icons` and
-   `~/.local/share/applications`. Still missing: a `systemd --user` unit, an
-   autostart entry, and a tray icon (there is no tray yet).
-   The visual language is the Windows icon's own (rounded blue gradient tile,
-   `A` + `ก`) so the two builds read as one product; generator takes the first
-   font it finds, so Noto on the X13 and Waree/Garuda on a bare box both work.
+   and `install.sh` copies both states of every size into `~/.local/share/icons`
+   and the entries into `~/.local/share/applications`. The tray and the settings
+   window came later and are described above.
+
+## The icon (v0.3.0)
+
+The mark is the **key the program lives behind**: a light keycap with a filled shift
+arrow on the rounded blue tile. It replaced the old `A` + `ก` + exchange-arc tile,
+which was three elements at 16 px - the arrow and one glyph dissolved, and the two
+glyphs that were left read as text, not as an app.
+
+Four candidates were drawn and rendered natively at every size before choosing (a
+paired mark, the keycap, a word-with-caret, a language toggle); the keycap won on the
+panel sizes, where a silhouette beats a word. Notes that cost time:
+
+* the arrow is a **filled polygon**, not the `⇧` font glyph - a glyph of that shape
+  turns to mush below ~24 px, the polygon stays a shape;
+* sizes <= 20 px get their own drawing (`tile()`): no key lip, a bigger cap, a
+  thicker arrow;
+* the generator draws the `off` (grey) state too, and `install.sh` installs *both*
+  names - the tray asks for `openrtlinux-off` the moment the daemon stops, and a
+  missing icon is a blank square in the panel (it was missing until v0.3.0);
+* `docs/img/icon.png` (the README's) is written by the same generator, so the site
+  cannot drift from the app;
+* candidates and the contact sheet live in `~/Documents/openrtlinux-icons-4/`.
 
 ## Traps already paid for (do not rediscover)
 

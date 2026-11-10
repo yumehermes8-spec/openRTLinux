@@ -4,6 +4,12 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Changed
+
+- A new app icon: the light keycap with a shift arrow on the rounded blue tile,
+  replacing the `A` + `ก` + exchange-arc mark, which was mush in the panel. The
+  grey "off" state is generated and installed now too (it never was).
+
 ### Added
 
 - English keyboards **Dvorak** and **Colemak**: words typed on the wrong

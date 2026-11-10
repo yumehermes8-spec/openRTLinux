@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """Generate the Linux icon set for openRTLinux.
 
-    python3 packaging/linux/make_icons.py [--out packaging/linux]
+    python3 packaging/linux/make_icons.py [--out packaging/linux] [--variant on|off]
 
-Same visual language as the Windows icon in `packaging/icons/make_icons.py`
-(the project's own: a rounded blue tile with the two scripts that this whole
-program is about), extended for Linux:
+The mark is the **key the program lives behind**: a light keycap with a filled
+shift arrow on the project's rounded blue tile. It replaced the A/ก tile in
+v0.3.0 - two glyphs and an exchange arc turned to mud in a panel, while a keycap
+survives 16 px (see `docs/PORTING-LINUX.md`, "The icon").
 
 * every size is drawn at 4x and downsampled, never scaled from 256 px, so the
   16/24 px versions stay sharp in a panel or window list;
+* the smallest sizes get their own drawing: no key lip, a bigger cap and a
+  thicker arrow, because a 1 px arrowhead is not an arrow;
 * a `hicolor` tree ready to install under `~/.local/share/icons` or
   `/usr/share/icons`, plus a hand-written SVG for anything that scales further;
 * state variants keep upstream's meanings: `on` (blue), `off` (grey).
 
-Needs Pillow and a Thai + a Latin bold face; it finds them itself and says what
-it used, instead of assuming a distribution's font layout.
+Needs Pillow; it finds the fonts itself and says what it used, instead of
+assuming a distribution's font layout.
 """
 
 from __future__ import annotations
@@ -23,15 +26,20 @@ import argparse
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 # Pillow renamed the resampling constants; keep working on both generations.
 LANCZOS = getattr(Image, "Resampling", Image).LANCZOS
 
 ROOT = Path(__file__).resolve().parents[2]
 
-ON = ((0x4C, 0xC2, 0xFF), (0x00, 0x5F, 0xB8))
+# the tile gradient, and the "off" greys the tray uses when the daemon is stopped
+ON = ((0x2E, 0x8B, 0xE6), (0x0A, 0x3D, 0x7A))
 OFF = ((0x9A, 0x9A, 0x9A), (0x5E, 0x5E, 0x5E))
+
+# the keycap: light face, a lip under it, and the arrow in the deep blue
+CAP_ON, LIP_ON, ARROW_ON = (0xEA, 0xF4, 0xFF), (0x08, 0x20, 0x3C), (0x0A, 0x57, 0xA8)
+CAP_OFF, LIP_OFF, ARROW_OFF = (0xEC, 0xEC, 0xEC), (0x1A, 0x1A, 0x1A), (0x55, 0x55, 0x55)
 
 SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512]
 
@@ -63,73 +71,73 @@ def find_font(candidates: list[str], what: str) -> str:
     sys.exit(f"no {what} bold font found - tried: {', '.join(candidates)}")
 
 
-def tile(size: int, colors, thai: str, latin: str, swap: bool) -> Image.Image:
+def gradient(size: int, colors) -> Image.Image:
+    top, bottom = colors
+    grad = Image.new("RGBA", (1, size))
+    for y in range(size):
+        t = y / (size - 1)
+        grad.putpixel((0, y), tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)) + (255,))
+    return grad.resize((size, size))
+
+
+def tile(size: int, colors, cap, lip, arrow) -> Image.Image:
+    """The whole icon at `size`, drawn at 4x and downsampled."""
     scale = 4  # supersample for anti-aliased edges
     s = size * scale
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-
-    top, bottom = colors
-    grad = Image.new("RGBA", (1, s))
-    for y in range(s):
-        t = y / (s - 1)
-        grad.putpixel((0, y), tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)) + (255,))
-    grad = grad.resize((s, s))
 
     margin = 0 if size <= 24 else round(s * 0.04)
     mask = Image.new("L", (s, s), 0)
     ImageDraw.Draw(mask).rounded_rectangle(
         (margin, margin, s - 1 - margin, s - 1 - margin), radius=round(s * 0.24), fill=255
     )
-    img.paste(grad, (0, 0), mask)
-    draw = ImageDraw.Draw(img)
-    white = (255, 255, 255, 255)
+    img.paste(gradient(s, colors), (0, 0), mask)
+    draw = ImageDraw.Draw(img, "RGBA")
 
     if size <= 20:
-        # one glyph only: at this size two are mud, and Thai reads as "Thai typing"
-        font = ImageFont.truetype(thai, round(s * 0.78))
-        draw.text((s / 2, s * 0.53), "ก", font=font, fill=white, anchor="mm")
-        return img.resize((size, size), LANCZOS)
-
-    latin_font = ImageFont.truetype(latin, round(s * 0.46))
-    thai_font = ImageFont.truetype(thai, round(s * 0.50))
-    draw.text((s * 0.33, s * 0.40), "A", font=latin_font, fill=white, anchor="mm")
-    draw.text((s * 0.67, s * 0.62), "ก", font=thai_font, fill=white, anchor="mm")
-
-    if swap and size >= 48:
-        # the port's own mark: an exchange arc between the two scripts
-        width = max(1, round(s * 0.022))
-        ink = (255, 255, 255, 190)
-        box = (round(s * 0.30), round(s * 0.34), round(s * 0.70), round(s * 0.78))
-        draw.arc(box, start=205, end=335, fill=ink, width=width)
-        # a small arrowhead on the upper end of the arc
-        arrow = round(s * 0.045)
-        cx, cy = round(s * 0.70), round(s * 0.55)
-        draw.polygon(
-            [(cx, cy - arrow), (cx + arrow, cy + arrow // 2), (cx - arrow, cy + arrow // 2)],
-            fill=white,
+        # no lip, a bigger cap, a fatter arrow: below ~20 px the detail is noise
+        cap_box = (0.11 * s, 0.15 * s, 0.89 * s, 0.71 * s)
+        draw.rounded_rectangle(cap_box, radius=round(0.10 * s), fill=cap)
+        arrow_scale = 1.14
+    else:
+        # the lip first, so the cap sits on top of it
+        draw.rounded_rectangle(
+            (0.172 * s, 0.656 * s, 0.828 * s, 0.758 * s), radius=round(0.051 * s), fill=lip + (140,)
         )
+        cap_box = (0.172 * s, 0.195 * s, 0.828 * s, 0.711 * s)
+        draw.rounded_rectangle(cap_box, radius=round(0.117 * s), fill=cap)
+        arrow_scale = 1.0
+
+    # the shift arrow: a chevron and a stem as one filled polygon (a font glyph
+    # of the same shape turns to mush at 16 px)
+    cx, cy = 0.5 * s, 0.47 * s
+    points = [
+        (0.500, 0.289), (0.688, 0.516), (0.586, 0.516), (0.586, 0.648),
+        (0.414, 0.648), (0.414, 0.516), (0.312, 0.516),
+    ]
+    draw.polygon(
+        [(cx + (x - 0.5) * s * arrow_scale, cy + (y - 0.47) * s * arrow_scale) for x, y in points],
+        fill=arrow,
+    )
     return img.resize((size, size), LANCZOS)
 
 
 SVG = """<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <!-- Mirrors packaging/linux/make_icons.py: the project's rounded tile with the
-       two scripts it exists to exchange. Text is kept as text so it stays sharp
-       at any size; the .ttf used at build time is named in the generator. -->
+  <!-- Mirrors packaging/linux/make_icons.py: the project's rounded blue tile with
+       the key the program lives behind. The arrow is a filled path, not a font
+       glyph, so it stays a shape at 16 px; the SVG is the same mark the PNGs are
+       drawn from, kept here for anything that scales further. -->
   <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4CC2FF"/>
-      <stop offset="1" stop-color="#005FB8"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#2E8BE6"/>
+      <stop offset="1" stop-color="#0A3D7A"/>
     </linearGradient>
   </defs>
-  <rect x="10" y="10" width="236" height="236" rx="61" fill="url(#tile)"/>
-  <text x="84" y="118" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="118"
-        font-weight="700" fill="#ffffff" text-anchor="middle">A</text>
-  <text x="172" y="176" font-family="Noto Looped Thai, Waree, Garuda, sans-serif"
-        font-size="128" font-weight="700" fill="#ffffff" text-anchor="middle">&#3585;</text>
-  <path d="M 77 106 A 51 56 0 0 0 179 141" fill="none" stroke="#ffffff"
-        stroke-opacity="0.75" stroke-width="6"/>
-  <path d="M 179 128 l 14 14 l -26 6 z" fill="#ffffff"/>
+  <rect width="256" height="256" rx="58" fill="url(#tile)"/>
+  <rect x="44" y="168" width="168" height="26" rx="13" fill="#08203c" fill-opacity="0.55"/>
+  <rect x="44" y="50" width="168" height="132" rx="30" fill="#EAF4FF"/>
+  <path d="M128 74 L176 132 H150 V166 H106 V132 H80 Z" fill="#0A57A8"/>
 </svg>
 """
 
@@ -138,41 +146,36 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "packaging" / "linux"))
     ap.add_argument("--variant", default="on", choices=["on", "off"])
-    ap.add_argument("--swap", action="store_true",
-                    help="draw the exchange arc (looked cluttered over the A - off by default)")
     args = ap.parse_args()
 
-    thai = find_font(THAI_CANDIDATES, "Thai")
-    latin = find_font(LATIN_CANDIDATES, "Latin")
-    print(f"thai font : {thai}")
-    print(f"latin font: {latin}")
-
     out = Path(args.out)
-    colors = ON if args.variant == "on" else OFF
-    swap = args.swap
-    name = "openrtlinux" if args.variant == "on" else "openrtlinux-off"
+    on = args.variant == "on"
+    colors = ON if on else OFF
+    cap, lip, arrow = (CAP_ON, LIP_ON, ARROW_ON) if on else (CAP_OFF, LIP_OFF, ARROW_OFF)
+    name = "openrtlinux" if on else "openrtlinux-off"
 
     written = []
     for size in SIZES:
-        img = tile(size, colors, thai, latin, swap)
         target = out / "hicolor" / f"{size}x{size}" / "apps" / f"{name}.png"
         target.parent.mkdir(parents=True, exist_ok=True)
-        img.save(target)
+        tile(size, colors, cap, lip, arrow).save(target)
         written.append(target)
-    # GNOME looks in scalable/ too, and some launchers only ask for one PNG
-    img = tile(256, colors, thai, latin, swap)
-    for extra in (out / f"{name}.png", out / "openrtlinux-screenshot.png"):
+    # some launchers only ask for one PNG, and the README shows one
+    extras = [out / f"{name}.png", out / "openrtlinux-screenshot.png"]
+    if on:
+        extras.append(ROOT / "docs" / "img" / "icon.png")
+    for extra in extras:
         extra.parent.mkdir(parents=True, exist_ok=True)
-        img.save(extra)
+        tile(256, colors, cap, lip, arrow).save(extra)
         written.append(extra)
-    if args.variant == "on":
+    if on:
         svg = out / "openrtlinux.svg"
         svg.write_text(SVG)
         written.append(svg)
 
-    print(f"{len(written)} files written under {out}")
+    print(f"{len(written)} files written for the {args.variant} variant")
     for path in written:
-        print(f"  {path.relative_to(out) if path.is_relative_to(out) else path}")
+        print(f"  {path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}")
     return 0
 
 
