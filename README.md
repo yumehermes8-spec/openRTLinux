@@ -145,7 +145,7 @@ rm -rf ~/.local/share/icons/hicolor/*/apps/openrtlinux*       # ไอคอน
 
 * แก้คำ/ตัวอักษรผิดแป้น ทั้งโหมด auto และ manual · hotkey 2 แบบ · สลับแป้นไทย↔อังกฤษให้เอง
 * เร็ว: แก้หนึ่งครั้งใช้ **13–27 ms** (วัดจาก log จริง)
-* **unit test 314 ตัวผ่าน** (`cargo test --features linuxos`) — เทสต์ของ upstream ไม่ถูกแตะ
+* **unit test 335 ตัวผ่าน** (`cargo test --features linuxos`) — เทสต์ของ upstream ไม่ถูกแตะ
 
 **ยังไม่มี**
 
@@ -319,7 +319,7 @@ rm -rf ~/.local/share/icons/hicolor/*/apps/openrtlinux*
 * fixes words and single characters typed in the wrong layout, in `auto` and `manual`;
 * two hotkey shapes; switches Thai ↔ English for you;
 * fast: a fix takes **13–27 ms** end to end (measured from the real logs);
-* **314 unit tests pass** (`cargo test --features linuxos`) — upstream's suite untouched.
+* **335 unit tests pass** (`cargo test --features linuxos`) — upstream's suite untouched.
 
 **Not there yet**
 

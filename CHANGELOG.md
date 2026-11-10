@@ -41,6 +41,28 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
   Snippets are laid out that way, and the folder buttons on Learned words are in
   their own card.
 
+## [0.3.0] — 2026-11-10
+
+The Linux layer: the fix hotkey's memory now expires, a repeated press behaves, and
+the desktop shows one openRTLinux instead of two. Details in
+`docs/releases/v0.3.0.md`; the Windows app is unchanged since 2.6.5.
+
+### Added
+
+- `recall_seconds` (15) and `undo_seconds` (60): a word that is already on screen
+  stays reachable for the fix hotkey for 15 s, the newest fix for a minute; `0`
+  keeps the old "never forget". Both are editable in `config.toml`.
+
+### Fixed
+
+- Pressing the fix hotkey more than twice chewed one character of the text before
+  the word on every press after the first (the hotkey's own Backspace was not
+  subtracted when the word had no boundary).
+- A layout change the probe reports now has to persist before it counts as the
+  typist's, so a fix's own switch no longer throws the recalled word away.
+- The settings window no longer shows the desktop switch key or the layout command,
+  and the app grid lists a single openRTLinux.
+
 ## [2.6.5] — 2026-10-29
 
 ### Changed

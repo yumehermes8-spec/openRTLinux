@@ -1,6 +1,6 @@
 [Unit]
 Description=openRTLinux — tray icon and settings window
-Documentation=file:%h/Cursor/righttype-ubuntu/docs/PORTING-LINUX.md
+Documentation=file:%h/Cursor/righttype-publish/docs/PORTING-LINUX.md
 After=graphical-session.target
 PartOf=graphical-session.target
 Wants=openrtlinux.service
