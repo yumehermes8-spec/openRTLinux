@@ -95,12 +95,14 @@ if command -v gtk-update-icon-cache >/dev/null; then
 fi
 if command -v desktop-file-validate >/dev/null; then
   desktop-file-validate "${APP_DIR}/openrtlinux.desktop" || true
+  desktop-file-validate "${APP_DIR}/openrtlinux-tray.desktop" || true
 fi
 
 echo "== done =="
 echo "binary : ${BIN_DIR}/openrtlinux  (needs ${BIN_DIR} on PATH)"
 echo "icon   : ${ICON_ROOT}/{16x16..512x512}/apps/openrtlinux.png + scalable/apps/openrtlinux.svg"
-echo "menu   : ${APP_DIR}/openrtlinux.desktop"
+echo "menu   : ${APP_DIR}/openrtlinux-tray.desktop  (the only entry shown in Activities;"
+echo "         ${APP_DIR}/openrtlinux.desktop is NoDisplay - the daemon runs as a service)"
 echo "tray   : ${BIN_DIR}/openrtlinux-tray  (${APP_DIR}/openrtlinux-tray.desktop)"
 echo "config : ${HOME}/.config/openrtlinux/config.toml"
 echo "         (the tray writes it, and it starts with dry_run = true -"

@@ -9,6 +9,7 @@
 //! set mode manual            -> {"ok":true,"mode":"manual"}
 //! set dry_run false          -> {"ok":true,"dry_run":false}
 //! reload                     -> re-read config.toml (the GUI just wrote it)
+//! undo                       -> put the last fix back (the settings window)
 //! quit                       -> the daemon exits
 //! ```
 //!
@@ -24,6 +25,17 @@ use std::thread;
 use crate::linuxos::config::{Config, Mode};
 use crate::policy::InputLayout;
 
+/// One line of the fix history, as the settings window shows it.
+#[derive(Debug, Clone)]
+pub struct HistoryItem {
+    /// Unix seconds.
+    pub at: u64,
+    pub shown: String,
+    pub corrected: String,
+    /// "fix" or "swap".
+    pub kind: String,
+}
+
 /// What the tray can see and change.
 #[derive(Debug, Clone)]
 pub struct Status {
@@ -35,6 +47,10 @@ pub struct Status {
     pub last: String,
     pub backend: String,
     pub version: String,
+    /// The fixes that were made, newest first (the settings window lists them).
+    pub history: Vec<HistoryItem>,
+    /// Whether the newest one can still be put back.
+    pub can_undo: bool,
 }
 
 #[derive(Debug)]
@@ -42,6 +58,8 @@ pub struct Shared {
     pub status: Status,
     /// The daemon re-reads config.toml when this is set.
     pub reload: bool,
+    /// The settings window asked for the last fix to be put back.
+    pub undo: bool,
     pub quit: bool,
 }
 
@@ -65,6 +83,7 @@ impl Control {
         let shared = Arc::new(Mutex::new(Shared {
             status: initial,
             reload: false,
+            undo: false,
             quit: false,
         }));
         let stop = Arc::new(AtomicBool::new(false));
@@ -107,6 +126,8 @@ impl Control {
             last: String::new(),
             backend: String::new(),
             version: env!("CARGO_PKG_VERSION").to_string(),
+            history: Vec::new(),
+            can_undo: false,
         })
     }
 
@@ -121,6 +142,17 @@ impl Control {
         match self.shared.lock() {
             Ok(mut shared) if shared.reload => {
                 shared.reload = false;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// True once (and only once) after the settings window asked for an undo.
+    pub fn take_undo(&self) -> bool {
+        match self.shared.lock() {
+            Ok(mut shared) if shared.undo => {
+                shared.undo = false;
                 true
             }
             _ => false,
@@ -164,6 +196,12 @@ fn handle(request: &str, shared: &Arc<Mutex<Shared>>) -> String {
             Err(_) => "{\"error\":\"state poisoned\"}".into(),
         },
         "set" => set(&arg.to_string(), &rest, shared),
+        "undo" => {
+            if let Ok(mut shared) = shared.lock() {
+                shared.undo = true;
+            }
+            "{\"ok\":true,\"undoing\":true}".into()
+        }
         "reload" => {
             if let Ok(mut shared) = shared.lock() {
                 shared.reload = true;
@@ -190,7 +228,7 @@ fn set(key: &str, value: &str, shared: &Arc<Mutex<Shared>>) -> String {
                 shared.status.mode = mode;
                 format!("{{\"ok\":true,\"mode\":\"{}\"}}", mode.as_str())
             }
-            None => "{\"error\":\"mode must be auto, manual or off\"}".into(),
+            None => "{\"error\":\"mode must be auto, manual, both or off\"}".into(),
         },
         "dry_run" => {
             let on = matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes" | "on");
@@ -201,11 +239,28 @@ fn set(key: &str, value: &str, shared: &Arc<Mutex<Shared>>) -> String {
     }
 }
 
+fn escaped(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// The one place the wire format is written: keep it valid JSON, and escape
+/// everything that came from the typist's own keyboard.
 pub fn status_json(status: &Status, pretty: bool) -> String {
-    let last = status.last.replace('\\', "\\\\").replace('"', "\\\"");
-    let value = format!(
-        "{{\"mode\":\"{}\",\"dry_run\":{},\"layout\":\"{}\",\"committed\":{},\"skipped\":{},\
-         \"last\":\"{}\",\"backend\":\"{}\",\"version\":\"{}\"}}",
+    let history: Vec<String> = status
+        .history
+        .iter()
+        .map(|item| {
+            format!(
+                "{{\"at\":{},\"shown\":\"{}\",\"corrected\":\"{}\",\"kind\":\"{}\"}}",
+                item.at,
+                escaped(&item.shown),
+                escaped(&item.corrected),
+                escaped(&item.kind),
+            )
+        })
+        .collect();
+    format!(
+        "{{\"mode\":\"{}\",\"dry_run\":{},\"layout\":\"{}\",\"committed\":{},\"skipped\":{},\"last\":\"{}\",\"backend\":\"{}\",\"version\":\"{}\",\"can_undo\":{},\"history\":[{}]}}",
         status.mode.as_str(),
         status.dry_run,
         match status.layout {
@@ -214,18 +269,14 @@ pub fn status_json(status: &Status, pretty: bool) -> String {
         },
         status.committed,
         status.skipped,
-        last,
-        status.backend,
-        status.version,
-    );
-    if pretty {
-        value
-    } else {
-        value
-    }
+        escaped(&status.last),
+        escaped(&status.backend),
+        escaped(&status.version),
+        status.can_undo,
+        history.join(","),
+    )
 }
 
-/// Load the config the daemon should run with (file first, defaults after).
 pub fn config_or_default() -> Config {
     Config::load()
 }

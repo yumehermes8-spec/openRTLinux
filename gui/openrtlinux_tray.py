@@ -64,6 +64,36 @@ def claim_single_instance() -> "int | None":
     os.ftruncate(fd, 0)
     os.write(fd, str(os.getpid()).encode())
     return fd
+
+
+WINDOW_REQUEST_PATH = Path(
+    os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+) / f"{APP}-tray.window"
+
+
+def request_window() -> None:
+    """Ask the tray that already owns the panel icon to open its settings window.
+
+    The launcher runs in the graphical session; a second copy started from the menu
+    has no display of its own worth using, so it drops a request and lets the running
+    tray (which does) open the window.
+    """
+    try:
+        WINDOW_REQUEST_PATH.write_text(str(os.getpid()))
+    except OSError:
+        pass
+
+
+def consume_window_request() -> bool:
+    if not WINDOW_REQUEST_PATH.exists():
+        return False
+    try:
+        WINDOW_REQUEST_PATH.unlink()
+    except OSError:
+        pass
+    return True
+
+
 ICON_ON = "openrtlinux"
 ICON_OFF = "openrtlinux-off"
 # the chords a person can pick for "fix the word under the cursor"
@@ -367,17 +397,15 @@ class SettingsWindow(Gtk.Window):
         grid.attach(self.hotkey, 1, row, 1, 1)
         row += 1
 
+        # Two fields a typist never touches - the desktop's own switch key and the
+        # command that reads the active layout - are deliberately *not* on this
+        # screen: what is left is only the choices somebody actually makes. They
+        # are still built, loaded and saved, so config.toml keeps them and nothing
+        # that reads those widgets has to learn about their absence.
         self.switch_key = Gtk.Entry()
         self.labels["switch_key"] = label_start(t("switch_key"))
-        grid.attach(self.labels["switch_key"], 0, row, 1, 1)
-        grid.attach(self.switch_key, 1, row, 1, 1)
-        row += 1
-
         self.current_command = Gtk.Entry()
         self.labels["current_command"] = label_start(t("current_command"))
-        grid.attach(self.labels["current_command"], 0, row, 1, 1)
-        grid.attach(self.current_command, 1, row, 1, 1)
-        row += 1
 
         self.autostart = Gtk.CheckButton(label=t("autostart"))
         grid.attach(self.autostart, 1, row, 1, 1)
@@ -705,6 +733,9 @@ class Tray:
         self.exit_item.set_label(t("tray_exit"))
 
     def refresh(self) -> bool:
+        if consume_window_request():
+            print("window requested from the menu - opening the settings window", flush=True)
+            self.on_settings()
         status = ask("status")
         running = "error" not in status
         self.status_item.set_label(describe(status))
@@ -797,6 +828,14 @@ def main() -> int:
         if HAVE_TRAY and not args.no_tray:
             tray = Tray()
         print("widgets built OK")
+        # anything left out of the grid on purpose: it has no parent, so it can
+        # never reach the screen even after `window.show_all()`
+        hidden = [
+            key
+            for key in ("switch_key", "current_command")
+            if window.labels[key].get_parent() is None
+        ]
+        print(f"  hidden rows: {', '.join(hidden) if hidden else 'none'}")
         print(f"  language: {LANG} ({'override' if args.lang else 'from config/environment'})")
         print(f"  sample: {t('window_title')} | {t('save')} | {mode_label('manual')}")
         print(f"  gate: GTK3 yes · tray {'yes' if tray else 'no'} · config {CONFIG_PATH}")
@@ -810,6 +849,10 @@ def main() -> int:
     else:
         holder = claim_single_instance()
         if holder is None:
+            if args.window:
+                request_window()
+                print("openRTLinux tray is already running - asked it to show the settings window")
+                return 0
             print("openRTLinux tray is already running - not starting a second one")
             return 0
         tray = Tray()

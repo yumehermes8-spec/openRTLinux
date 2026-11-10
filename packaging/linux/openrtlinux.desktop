@@ -8,6 +8,9 @@ Comment=Fix Thai/English text typed on the wrong keyboard layout
 Comment[th]=แก้ข้อความที่พิมพ์ผิดแป้น ไทย ↔ อังกฤษ
 Exec=openrtlinux
 Icon=openrtlinux
+# The daemon is a systemd user service (openrtlinux.service) - this entry exists only
+# for manual debugging, and is hidden so the app grid shows exactly one openRTLinux.
+NoDisplay=true
 Terminal=true
 Categories=Utility;Accessibility;
 Keywords=thai;keyboard;layout;english;

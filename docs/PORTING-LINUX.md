@@ -49,10 +49,17 @@ JSON reply per line.
 * **Tray**: mode (auto / manual / off), the dry-run switch, "start daemon" when the
   socket is missing, the settings window, the journal, and stop/quit. The icon is
   `openrtlinux` normally and `openrtlinux-off` when the mode is off or the daemon is gone.
-* **Settings window**: modes, dry-run, the fix hotkey, the layout commands,
-  autostart, plus a live status line. Saving writes `~/.config/openrtlinux/config.toml`
-  and asks the daemon to `reload` (mode and dry_run are also pushed, so a running
-  daemon follows immediately).
+* **Settings window**: language, modes, dry-run, the fix hotkey, autostart, the undo
+  button, the history, plus a live status line. Saving writes
+  `~/.config/openrtlinux/config.toml` and asks the daemon to `reload` (mode and dry_run
+  are also pushed, so a running daemon follows immediately).
+* The desktop's own **switch key** and the **command that reads the active layout** are
+  *not* on that screen (Suvasin, 2026-11-10: a typist never touches them). Their widgets
+  are still built, loaded and saved, so `config.toml` keeps the values and Save cannot
+  blank them - they are simply never attached to the grid, so `show_all()` cannot reveal
+  them either. `--selftest` prints `hidden rows: switch_key, current_command` by checking
+  each one has no parent, which is how this is verified over SSH; the values themselves
+  are read back from the entries after `load_config()`.
 * `openrtlinux-tray --report` prints the daemon's status (how to see what the tray sees
   over SSH); `--selftest` builds the widgets and the indicator and exits.
 * GNOME has no tray of its own: `install.sh` turns on
@@ -361,3 +368,35 @@ upstream clone.** A copy taken days earlier carries older versions of files upst
 since changed, and copying it wholesale silently reverts their work (it did: eleven
 files, including `src/hook.rs`). Copy only what this port actually adds or changes, and
 check `git status` before committing.
+
+## A remembered word has a window, and the cursor invalidates it (2026-11-10)
+
+The fix chord reaches for a word that is *already on screen*, so the daemon has to
+remember it. Two memories did that - the word a boundary closed (`pending`) and the
+newest fix (`swap`, what `both` swaps back) - and neither expired. This process sees the
+keyboard only: no pointer, no window focus. A word remembered from another document was
+therefore deleted at whatever cursor was there when the chord was finally pressed,
+minutes later, and the corrected text was typed over it.
+
+The rule now (Suvasin's numbers):
+
+* `recall_seconds = 15` - a word a boundary closed stays reachable for the chord for
+  15 s; after that the press does nothing (it counts in `skipped`; nothing is deleted);
+* `undo_seconds = 60` - the newest fix can be swapped back or undone for a minute,
+  because a wrong *fix* is noticed later than a wrong word;
+* `0` in either key means "never forget" - the pre-TTL behaviour, kept for the record;
+* both windows run on a monotonic millisecond clock (`Live::set_now`, fed from one
+  `Instant` in the daemon loop), so a clock step or a suspended laptop cannot expire a
+  word early - and the unit tests move that clock by hand instead of sleeping;
+* what the daemon *can* see forgets the word at once: Escape, an arrow, Home/End,
+  PageUp/Pagedown, Delete (`is_reset`) and a deliberate layout switch (`note_user_switch`);
+* the word *being typed* (`buf`) never expires: it is anchored to the cursor;
+* `can_undo()` applies exactly the guards `swap_last_fix` does, age included, so the tray
+  button cannot light up for a fix that can no longer be put back.
+
+`linuxos::live::recall_window_tests` covers the edges: at the limit, one millisecond
+past it, Escape at once, a switch at once, mid-word never, undo at 60 s and past it.
+
+Note for later: only `both` (and a chord fix in `manual`) keeps a `swap`, so an
+*automatic* fix in `auto` mode cannot be undone from the window today.
+

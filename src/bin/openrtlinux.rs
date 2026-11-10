@@ -268,6 +268,8 @@ fn main() {
 
     let mut live = live::Live::new(active);
     live.mode = cfg.mode;
+    live.recall_ms = config::window_ms(cfg.recall_seconds);
+    live.undo_ms = config::window_ms(cfg.undo_seconds);
 
     // The tray and the settings window talk to us here.
     let control = match control::Control::start(control::Status {
@@ -277,6 +279,8 @@ fn main() {
         committed: 0,
         skipped: 0,
         last: String::new(),
+        history: Vec::new(),
+        can_undo: false,
         backend: format!("evdev · {}", if cfg.dry_run { "dry-run" } else { "fix" }),
         version: env!("CARGO_PKG_VERSION").to_string(),
     }) {
@@ -296,11 +300,22 @@ fn main() {
         if cfg.dry_run { "dry-run (never types)" } else { "fix" },
         if chord.is_empty() { " · no switch chord found" } else { "" }
     );
+    println!(
+        "  recall: {} after a word is closed · undo: {} after a fix",
+        describe_window(cfg.recall_seconds),
+        describe_window(cfg.undo_seconds)
+    );
 
     let mut last_probe = Instant::now();
     let mut last_publish = Instant::now();
     let mut pending: Vec<kb_capture::RawKey> = Vec::new();
     let mut last_backspace: Option<Instant> = None;
+    // A layout change the probe reports that is not ours yet: kept until it
+    // persists, because a fix of ours switches the layout too.
+    let mut mismatch: Option<(InputLayout, Instant)> = None;
+    // The recall windows are measured against this, never against wall time: a
+    // clock step (or a suspended laptop) must not expire a word early.
+    let clock = Instant::now();
     'daemon: loop {
         if control.quitting() {
             println!("openrtlinux: asked to quit");
@@ -308,6 +323,8 @@ fn main() {
         }
         if control.take_reload() {
             cfg = config::Config::load_from(&config_path);
+            live.recall_ms = config::window_ms(cfg.recall_seconds);
+            live.undo_ms = config::window_ms(cfg.undo_seconds);
             chord = os_layout::switch_chord(&cfg.switch_command);
             if cfg.fix_chord() != fix_chord {
                 fix_chord = cfg.fix_chord();
@@ -324,14 +341,18 @@ fn main() {
                 );
             });
             println!(
-                "openrtlinux: config reloaded (mode {}, dry_run {})",
+                "openrtlinux: config reloaded (mode {}, dry_run {}, recall {}, undo {})",
                 cfg.mode.as_str(),
-                cfg.dry_run
+                cfg.dry_run,
+                describe_window(cfg.recall_seconds),
+                describe_window(cfg.undo_seconds)
             );
         }
         let live_status = control.status();
         live.mode = live_status.mode;
         let dry_run = live_status.dry_run;
+        // before any decision this turn: how old the memories are now
+        live.set_now(clock.elapsed().as_millis() as u64);
 
         let mut batch: Vec<kb_capture::RawKey> = pending.drain(..).collect();
         batch.extend(capture.poll());
@@ -481,13 +502,38 @@ fn main() {
             }
         }
 
-        // the typist may switch layout with their own keys at any time
+        // The typist may switch layout with their own keys at any time - and
+        // this also forgets the word they were about to fix, because the
+        // decision for it belongs to the layout it was typed in.
+        //
+        // A fix of ours switches the layout too, and the probe thread only
+        // re-reads the desktop every 400 ms: right after our own switch it can
+        // still be holding the old value, and believing that would throw the
+        // recalled word away after a perfectly good fix. So a disagreement has
+        // to *persist* across two checks before it counts as theirs.
         if last_probe.elapsed() > Duration::from_millis(200) {
             last_probe = Instant::now();
-            if let Some(now) = probe.get() {
-                if now != live.layout() {
-                    live.note_user_switch(now);
+            match probe.get() {
+                Some(now) if now != live.layout() => {
+                    let persisted = matches!(mismatch, Some((seen, since))
+                        if seen == now && since.elapsed() >= Duration::from_millis(250));
+                    if persisted {
+                        mismatch = None;
+                        live.note_user_switch(now);
+                    } else if !matches!(mismatch, Some((seen, _)) if seen == now) {
+                        mismatch = Some((now, Instant::now()));
+                    }
                 }
+                _ => mismatch = None,
+            }
+        }
+        if control.take_undo() {
+            match live.undo_last() {
+                Some(committed) => {
+                    report(&committed);
+                    apply_plan(&committed, injector.as_mut(), &chord, &probe, dry_run, args.debug);
+                }
+                None => println!("undo: nothing to put back (the word has moved on)"),
             }
         }
         if last_publish.elapsed() > Duration::from_millis(400) {
@@ -496,11 +542,31 @@ fn main() {
                 status.layout = live.layout();
                 status.committed = live.committed;
                 status.skipped = live.skipped;
+                status.can_undo = live.can_undo();
+                status.history = live
+                    .history
+                    .iter()
+                    .map(|fixed| control::HistoryItem {
+                        at: fixed.at,
+                        shown: fixed.shown.clone(),
+                        corrected: fixed.corrected.clone(),
+                        kind: fixed.kind.to_string(),
+                    })
+                    .collect();
             });
         }
         sleep(Duration::from_millis(2));
     }
     control.stop();
+}
+
+/// `15 s`, or `never` when 0 turns the window off.
+fn describe_window(seconds: u64) -> String {
+    if seconds == 0 {
+        "never".to_string()
+    } else {
+        format!("{seconds} s")
+    }
 }
 
 fn report(committed: &live::Committed) {

@@ -86,6 +86,28 @@ impl FixChord {
     }
 }
 
+/// How long a word that a boundary already closed stays reachable for the fix
+/// chord, in seconds.
+///
+/// The daemon cannot see the pointer or the window focus, so a word remembered
+/// from another document would be deleted at whatever cursor is there now.
+/// 0 = never forget it (the pre-TTL behaviour).
+pub const DEFAULT_RECALL_SECONDS: u64 = 15;
+
+/// How long the newest fix can be swapped back or undone, in seconds. Longer
+/// than [`DEFAULT_RECALL_SECONDS`]: a wrong fix is noticed later than a wrong
+/// word. 0 = never forget it.
+pub const DEFAULT_UNDO_SECONDS: u64 = 60;
+
+/// Seconds as the milliseconds the decisions compare. 0 means "no expiry".
+pub const fn window_ms(seconds: u64) -> u64 {
+    if seconds == 0 {
+        u64::MAX
+    } else {
+        seconds.saturating_mul(1000)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -103,6 +125,11 @@ pub struct Config {
     /// Which chord fixes the word under the cursor: `shift+backspace` (default)
     /// or `shift+space`. Stored as text so the settings window can write it.
     pub fix_word_hotkey: String,
+    /// Seconds a word that a boundary already closed stays reachable for the fix
+    /// chord; after that the daemon forgets it (0 = never forget).
+    pub recall_seconds: u64,
+    /// Seconds the newest fix can still be swapped back or undone (0 = never).
+    pub undo_seconds: u64,
 }
 
 impl Default for Config {
@@ -115,6 +142,8 @@ impl Default for Config {
             tray_autostart: false,
             layout: String::new(),
             fix_word_hotkey: "shift+backspace".to_string(),
+            recall_seconds: DEFAULT_RECALL_SECONDS,
+            undo_seconds: DEFAULT_UNDO_SECONDS,
         }
     }
 }
