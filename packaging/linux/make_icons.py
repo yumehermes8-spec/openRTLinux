@@ -161,9 +161,9 @@ def main() -> int:
         tile(size, colors, cap, lip, arrow).save(target)
         written.append(target)
     # some launchers only ask for one PNG, and the README shows one
-    extras = [out / f"{name}.png", out / "openrtlinux-screenshot.png"]
+    extras = [out / f"{name}.png"]
     if on:
-        extras.append(ROOT / "docs" / "img" / "icon.png")
+        extras += [out / "openrtlinux-screenshot.png", ROOT / "docs" / "img" / "icon.png"]
     for extra in extras:
         extra.parent.mkdir(parents=True, exist_ok=True)
         tile(256, colors, cap, lip, arrow).save(extra)
