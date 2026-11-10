@@ -219,7 +219,7 @@ impl Live {
             return None;
         }
         if self.mode == Mode::Both {
-            if let Some(swapped) = self.swap_last_fix() {
+            if let Some(swapped) = self.swap_last_fix(pre_deleted) {
                 return Some(swapped);
             }
         }
@@ -371,8 +371,11 @@ impl Live {
     }
 
     /// Undo it, whoever asks: the settings window's button, not only the hotkey.
+    ///
+    /// Nothing has been deleted by a keystroke here, which is the one thing
+    /// [`swap_last_fix`](Self::swap_last_fix) has to be told.
     pub fn undo_last(&mut self) -> Option<Committed> {
-        self.swap_last_fix()
+        self.swap_last_fix(0)
     }
 
     /// What the typist meant, for a deliberate press.
@@ -486,7 +489,14 @@ impl Live {
     /// Returns `None` when the press is not about that word - a new word is being
     /// typed, or the word under the cursor is not the one we just fixed - and the
     /// ordinary "fix this word" path takes over.
-    fn swap_last_fix(&mut self) -> Option<Committed> {
+    ///
+    /// `pre_deleted` is how many characters the caller's own keystroke has already
+    /// removed from the screen before this decision: 1 for the fix chord (its
+    /// Shift+Backspace), 0 for the tray's Undo button. Getting it wrong is how a
+    /// repeated press ate the character *before* the word - the chord's Backspace
+    /// takes the boundary when a boundary was typed, and a character of the word
+    /// itself when none was, and the deletion has to shrink to match.
+    fn swap_last_fix(&mut self, pre_deleted: usize) -> Option<Committed> {
         let (from, to, separator) = {
             let swap = self.swap.as_ref()?;
             // past the undo window the cursor may be anywhere: let the ordinary
@@ -513,9 +523,14 @@ impl Live {
         if target != self.layout {
             steps.push(Plan::Switch(target));
         }
-        // the hotkey's own Backspace already removed the boundary, and the word
-        // needs to go before the other spelling can be typed in its place
-        steps.push(Plan::Backspaces(from.chars().count()));
+        // What is on screen is `from` plus its boundary, less whatever the
+        // caller's keystroke already ate: the chord's Backspace removes the
+        // boundary when there is one, and a character of the word when there is
+        // not. Delete exactly that much, then type the other spelling and the
+        // boundary back.
+        let on_screen = from.chars().count() + separator.chars().count();
+        let remaining = on_screen.saturating_sub(pre_deleted);
+        steps.push(Plan::Backspaces(remaining));
         steps.push(Plan::Type(format!("{to}{separator}")));
         self.layout = target;
         self.showing_right = !self.showing_right;
@@ -1177,5 +1192,154 @@ mod recall_window_tests {
         assert!(live.on_fix_hotkey(1).is_some(), "the chord fixed the word");
         live.set_now(UNDO_MS);
         assert!(live.can_undo(), "manual fixes keep a swap too");
+    }
+}
+
+
+/// The repeated press, against a stand-in for the focused text box.
+///
+/// The application's *own* keystrokes arrive before the daemon decides - the
+/// chord's Backspace, and every character the typist types - so the plans have to
+/// add up to exactly what is on screen. They did not: each swap deleted one
+/// character too many when no boundary had been typed, which ate the text to the
+/// left of the word on every press after the first.
+#[cfg(test)]
+mod chord_repeat_tests {
+    use super::*;
+
+    /// "fvdw,h" on the English layout, and what it was meant to be.
+    const WRONG: &str = "fvdw,h";
+    const RIGHT: &str = "\u{e14}\u{e2d}\u{e01}\u{e44}\u{e21}\u{e49}";
+    /// "หวัดดี" - text that already sits to the left of the word.
+    const BEFORE: &str = "\u{e2b}\u{e31}\u{e14}\u{e14}\u{e35} ";
+
+    struct Screen {
+        live: Live,
+        text: String,
+    }
+
+    impl Screen {
+        fn new(mode: Mode, before: &str) -> Self {
+            let mut live = Live::new(InputLayout::UsQwerty);
+            live.mode = mode;
+            Screen {
+                live,
+                text: before.to_string(),
+            }
+        }
+
+        fn type_chars(&mut self, text: &str) {
+            for c in text.chars() {
+                self.live.on_char(c);
+                self.text.push(c);
+            }
+        }
+
+        fn boundary(&mut self, boundary: char) {
+            self.text.push(boundary);
+            if let Some(committed) = self.live.on_boundary(boundary) {
+                self.apply(&committed.steps);
+            }
+        }
+
+        /// Shift+Backspace: the application deletes one character before we see it.
+        fn chord(&mut self) {
+            self.text.pop();
+            if let Some(committed) = self.live.on_fix_hotkey(1) {
+                self.apply(&committed.steps);
+            }
+        }
+
+        /// The settings window's Undo button: no keystroke deleted anything first.
+        fn tray_undo(&mut self) {
+            if let Some(committed) = self.live.undo_last() {
+                self.apply(&committed.steps);
+            }
+        }
+
+        fn apply(&mut self, steps: &[Plan]) {
+            for step in steps {
+                match step {
+                    Plan::Switch(_) => {}
+                    Plan::Backspaces(n) => {
+                        for _ in 0..*n {
+                            self.text.pop();
+                        }
+                    }
+                    Plan::Type(text) => self.text.push_str(text),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_chord_pressed_three_times_toggles_without_eating_its_neighbours() {
+        // mid-word: no boundary was typed, so every press's own Backspace eats a
+        // character of the word itself
+        let mut screen = Screen::new(Mode::Both, "ab ");
+        screen.type_chars(WRONG);
+        for expected in [RIGHT, WRONG, RIGHT] {
+            screen.chord();
+            assert_eq!(
+                screen.text,
+                format!("ab {expected}"),
+                "the text before the word has to stay put"
+            );
+        }
+    }
+
+    #[test]
+    fn after_a_boundary_the_chord_toggles_the_same_way() {
+        let mut screen = Screen::new(Mode::Both, "ab ");
+        screen.type_chars(WRONG);
+        screen.boundary(' '); // `both` fixes at the boundary
+        assert_eq!(screen.text, format!("ab {RIGHT} "));
+        for expected in [WRONG, RIGHT, WRONG] {
+            screen.chord();
+            assert_eq!(screen.text, format!("ab {expected} "));
+        }
+    }
+
+    #[test]
+    fn the_tray_undo_puts_the_word_back_exactly() {
+        let mut screen = Screen::new(Mode::Both, "ab ");
+        screen.type_chars(WRONG);
+        screen.chord();
+        assert_eq!(screen.text, format!("ab {RIGHT}"));
+        screen.tray_undo();
+        assert_eq!(screen.text, format!("ab {WRONG}"));
+        screen.tray_undo();
+        assert_eq!(screen.text, format!("ab {RIGHT}"));
+    }
+
+    #[test]
+    fn the_tray_undo_after_an_automatic_fix_keeps_the_boundary() {
+        let mut screen = Screen::new(Mode::Both, "ab ");
+        screen.type_chars(WRONG);
+        screen.boundary(' ');
+        assert_eq!(screen.text, format!("ab {RIGHT} "));
+        screen.tray_undo();
+        assert_eq!(
+            screen.text,
+            format!("ab {WRONG} "),
+            "the boundary is neither doubled nor lost"
+        );
+    }
+
+    #[test]
+    fn ten_presses_in_a_row_leave_the_sentence_alone() {
+        // the mangling that was reported: each press deleted one character more
+        // than the word, chewing the text to the left of it
+        let mut screen = Screen::new(Mode::Both, BEFORE);
+        screen.type_chars(WRONG);
+        for press in 0..10 {
+            screen.chord();
+            assert!(
+                screen.text == format!("{BEFORE}{WRONG}")
+                    || screen.text == format!("{BEFORE}{RIGHT}"),
+                "press {press} left the screen as {:?}",
+                screen.text
+            );
+        }
     }
 }

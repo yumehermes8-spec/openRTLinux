@@ -400,3 +400,23 @@ past it, Escape at once, a switch at once, mid-word never, undo at 60 s and past
 Note for later: only `both` (and a chord fix in `manual`) keeps a `swap`, so an
 *automatic* fix in `auto` mode cannot be undone from the window today.
 
+## A repeated press is a toggle, and the counting has to match the screen (2026-11-10)
+
+`both` mode's hotkey toggles the two spellings, so it can be pressed again and again.
+Every press arrives *after* the application has already run its own Shift+Backspace: the
+daemon never sees the character that keystroke ate, it has to be told. The first press
+was told (`pre_deleted = 1`); the swap was not - it deleted `from.len()` assuming the
+keystroke had eaten the boundary. Mid-word there is no boundary, so the keystroke had
+eaten a character of the *word*, and every press after the first deleted one character
+too many: the word got glued to the text before it, then ate into it.
+
+The rule now, in `swap_last_fix(pre_deleted)`: delete `from.len() + separator.len() -
+pre_deleted` and type `to + separator`. The chord passes 1, the settings window's Undo
+button passes 0 (nothing was deleted first) - which also stops that button from leaving a
+double space behind.
+
+`linuxos::live::chord_repeat_tests` stands a `String` in for the focused text box and
+applies the plans to it, including the application's own keystroke, then presses the
+chord three and ten times and checks the whole sentence - not just the word. Ten presses
+used to leave the text a character shorter each time; that is the test to keep.
+
