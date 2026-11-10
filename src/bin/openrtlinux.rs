@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use righttype::layout::{self as core_layout};
 use righttype::linuxos::layout::{self as os_layout};
-use righttype::linuxos::{capture as kb_capture, config, control, inject, keytable, live};
+use righttype::linuxos::{capture as kb_capture, config, control, inject, keytable, live, words};
 use righttype::policy::InputLayout;
 use evdev::KeyCode;
 
@@ -270,6 +270,8 @@ fn main() {
     live.mode = cfg.mode;
     live.recall_ms = config::window_ms(cfg.recall_seconds);
     live.undo_ms = config::window_ms(cfg.undo_seconds);
+    live.words = words::Words::load(&words::path());
+    live.words.teach_dictionaries();
 
     // The tray and the settings window talk to us here.
     let control = match control::Control::start(control::Status {
@@ -305,6 +307,7 @@ fn main() {
         describe_window(cfg.recall_seconds),
         describe_window(cfg.undo_seconds)
     );
+    println!("  words: {} · {}", describe_words(&live.words), words::path().display());
 
     let mut last_probe = Instant::now();
     let mut last_publish = Instant::now();
@@ -325,6 +328,11 @@ fn main() {
             cfg = config::Config::load_from(&config_path);
             live.recall_ms = config::window_ms(cfg.recall_seconds);
             live.undo_ms = config::window_ms(cfg.undo_seconds);
+            // the settings window edits words.toml itself, so a reload picks that
+            // list up the same way it picks up config.toml
+            live.words = words::Words::load(&words::path());
+            live.words.teach_dictionaries();
+            println!("  words: {}", describe_words(&live.words));
             chord = os_layout::switch_chord(&cfg.switch_command);
             if cfg.fix_chord() != fix_chord {
                 fix_chord = cfg.fix_chord();
@@ -397,6 +405,7 @@ fn main() {
                                     capture.wait_for_modifier_release(Duration::from_millis(600)),
                                 );
                                 if !capture.mods().any_held() {
+                                    keep_as_typed(&mut live, &committed);
                                     report(&committed);
                                     apply_plan(
                                         &committed,
@@ -431,6 +440,7 @@ fn main() {
                             live.skipped += 1;
                             continue;
                         }
+                        keep_as_typed(&mut live, &committed);
                         report(&committed);
                         apply_plan(
                             &committed,
@@ -465,6 +475,7 @@ fn main() {
                         live.skipped += 1;
                         continue;
                     }
+                    keep_as_typed(&mut live, &committed);
                     report(&committed);
                     apply_plan(
                         &committed,
@@ -484,7 +495,18 @@ fn main() {
                 continue;
             }
             if let Some(boundary) = boundary_char(key.code, mods.shift) {
-                if let Some(committed) = live.on_boundary(boundary) {
+                let decided = live.on_boundary(boundary);
+                if decided.is_none() {
+                    // a word we left as typed is the typist's own vocabulary, which
+                    // is exactly what the learner counts
+                    if let Some(word) = live.take_left_word() {
+                        if live.words.observe(&word) {
+                            println!("  learned: {word}");
+                            persist_word(&word);
+                        }
+                    }
+                }
+                if let Some(committed) = decided {
                     report(&committed);
                     apply_plan(
                         &committed,
@@ -530,6 +552,7 @@ fn main() {
         if control.take_undo() {
             match live.undo_last() {
                 Some(committed) => {
+                    keep_as_typed(&mut live, &committed);
                     report(&committed);
                     apply_plan(&committed, injector.as_mut(), &chord, &probe, dry_run, args.debug);
                 }
@@ -558,6 +581,41 @@ fn main() {
         sleep(Duration::from_millis(2));
     }
     control.stop();
+}
+
+/// A swap is the typist saying "the first spelling was right": keep it as typed,
+/// so no fix ever touches it again. Written to the file the settings window owns,
+/// re-read first so an edit made there is never lost.
+fn keep_as_typed(live: &mut live::Live, committed: &live::Committed) {
+    if committed.kind != "swap" {
+        return;
+    }
+    if live.words.keep_as_typed(&committed.corrected) {
+        println!("  keeping as typed: {}", committed.corrected);
+        persist_word(&committed.corrected);
+    }
+    live.words.teach_dictionaries();
+}
+
+/// Add one word to the file on disk, re-reading it first: the settings window
+/// edits the same file while the daemon runs, and what is on disk wins.
+fn persist_word(word: &str) {
+    let path = words::path();
+    let mut disk = words::Words::load(&path);
+    if disk.add(word) {
+        if let Err(why) = disk.save(&path) {
+            eprintln!("cannot write {}: {why}", path.display());
+        }
+    }
+}
+
+fn describe_words(words: &words::Words) -> String {
+    format!(
+        "{} kept · {} pair(s){}",
+        words.words().count(),
+        words.pairs().count(),
+        if words.learn { "" } else { " · auto-learn off" }
+    )
 }
 
 /// `15 s`, or `never` when 0 turns the window off.

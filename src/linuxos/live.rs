@@ -20,6 +20,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::buffer::{Key, WordBuffer};
 use crate::dict;
 use crate::linuxos::config::{self, Mode};
+use crate::linuxos::words::Words;
 use crate::layout as core_layout;
 use crate::policy::{self, InputLayout};
 
@@ -40,6 +41,10 @@ pub struct Committed {
     pub shown: String,
     /// What it is being replaced with.
     pub corrected: String,
+    /// `"fix"` for a correction, `"swap"` for putting the other spelling back.
+    /// The daemon learns from a swap: the typist just said the first spelling was
+    /// right, which is worth keeping.
+    pub kind: &'static str,
     pub steps: Vec<Plan>,
 }
 
@@ -94,6 +99,12 @@ pub struct Live {
     /// chord can reach us in the other order (Backspace, then Shift), and by
     /// then the buffer has already lost the character the chord was meant to eat.
     before_backspace: Option<String>,
+    /// The last word a boundary closed and we left alone, for the learner to
+    /// count (the typist's own vocabulary). Taken by the daemon.
+    left: Option<String>,
+    /// The typist's own words: never touch these, and these pairs are what they
+    /// said they are.
+    pub words: Words,
     /// The millisecond clock the recall windows are measured against. The daemon
     /// sets it from its own `Instant` before each decision; the tests move it by
     /// hand instead of sleeping.
@@ -126,6 +137,8 @@ impl Live {
             buf: WordBuffer::new(),
             pending: None,
             before_backspace: None,
+            left: None,
+            words: Words::default(),
             now: 0,
             recall_ms: config::window_ms(config::DEFAULT_RECALL_SECONDS),
             undo_ms: config::window_ms(config::DEFAULT_UNDO_SECONDS),
@@ -186,6 +199,13 @@ impl Live {
 
     pub fn current_word(&self) -> &str {
         self.buf.current()
+    }
+
+    /// The word the last boundary closed and left alone, if any - the typist's
+    /// own vocabulary, for the learner to count. Taken, so one word is one
+    /// sighting.
+    pub fn take_left_word(&mut self) -> Option<String> {
+        self.left.take()
     }
 
     /// A plain Backspace went to the application: remember the word it just
@@ -331,6 +351,7 @@ impl Live {
         Some(Committed {
             shown,
             corrected,
+            kind: "fix",
             steps,
         })
     }
@@ -388,6 +409,15 @@ impl Live {
     ///     both words and neither verdict means anything). A press is a
     ///     deliberate act, so the typist gets what they asked for.
     fn decide(&self, shown: &str) -> Option<String> {
+        // The typist's own list comes first: a pair is what they said it is, and
+        // a word they kept is not ours to touch.
+        if let Some(right) = self.words.resolve(shown) {
+            return Some(right);
+        }
+        if self.words.protects(shown) {
+            return None;
+        }
+        // The word checker, which understands compounds and trailing marks.
         if let Some(detection) =
             policy::detect_token(shown, self.layout, dict::english(), dict::thai())
         {
@@ -398,6 +428,10 @@ impl Live {
         if let Some(reading) = careful_reading(shown, self.layout) {
             return Some(reading);
         }
+        // Then the other layout's reading - **always**. A press is a deliberate
+        // act: "a real word stays put" is a guard for the automatic path, and
+        // Suvasin asked for the chord to convert whatever is under the cursor
+        // without judging whether it looks mistyped (2026-11-10).
         let reading = read_in_other(shown, self.layout);
         let readable = shown
             .chars()
@@ -405,31 +439,30 @@ impl Live {
         if reading == shown || !readable {
             return None;
         }
-        // A short token: read it the other way and be done, because the
-        // dictionaries cannot tell "dd" from "กก".
-        if shown.chars().count() <= SHORT_ENOUGH_TO_JUST_READ_IT {
-            return Some(reading);
-        }
-        // A longer one: only if it is not a word where it sits. A real word on
-        // screen stays put - an accidental press must not mangle it - while a
-        // string no dictionary knows ("Suvasin" typed in the Thai layout) is
-        // plainly the wrong layout, which is what the press was about.
-        let (here, _) = match self.layout {
-            InputLayout::ThaiKedmanee => (dict::thai(), dict::english()),
-            InputLayout::UsQwerty => (dict::english(), dict::thai()),
-        };
-        if here.contains(shown.trim()) {
-            None
-        } else {
-            Some(reading)
-        }
+        Some(reading)
     }
 
     /// A boundary key (space/enter/tab). Returns the plan to run, if any.
     pub fn on_boundary(&mut self, boundary: char) -> Option<Committed> {
         let shown = self.buf.observe(Key::Boundary)?;
+        // A word the typist keeps as typed is not ours to fix, whatever the
+        // dictionaries make of it.
+        if self.words.protects(&shown) {
+            self.left = Some(shown.clone());
+            self.pending = Some(Remembered {
+                word: shown,
+                separator: boundary.to_string(),
+                at: self.now,
+            });
+            return None;
+        }
+        // A pair of theirs wins here as well: it is what they said this string is.
+        if self.words.resolve(&shown).is_some() {
+            return self.plan_fix(shown, 0, boundary.to_string(), true);
+        }
         if !matches!(self.mode, Mode::Auto | Mode::Both) {
             // manual: the word is on screen, waiting for the hotkey
+            self.left = Some(shown.clone());
             self.pending = Some(Remembered {
                 word: shown,
                 separator: boundary.to_string(),
@@ -446,10 +479,16 @@ impl Live {
             Some(detection) if detection.corrected != shown => detection.corrected,
             _ if shown.chars().count() >= 2 => match careful_reading(&shown, self.layout) {
                 Some(reading) => reading,
-                None => return None,
+                None => {
+                    self.left = Some(shown);
+                    return None;
+                }
             },
             // a single character is never fixed without being asked
-            _ => return None,
+            _ => {
+                self.left = Some(shown);
+                return None;
+            }
         };
         let target = layout_of(&corrected);
         let mut steps = Vec::new();
@@ -480,6 +519,7 @@ impl Live {
         Some(Committed {
             shown,
             corrected,
+            kind: "fix",
             steps,
         })
     }
@@ -544,15 +584,11 @@ impl Live {
         Some(Committed {
             shown: from,
             corrected: to,
+            kind: "swap",
             steps,
         })
     }
 }
-
-/// Below this many characters the dictionaries stop being evidence: two-letter
-/// abbreviations are in every word list, and short tokens are words in both
-/// languages often enough that no verdict can be trusted.
-const SHORT_ENOUGH_TO_JUST_READ_IT: usize = 3;
 
 /// The key table for a layout (the port has exactly two).
 pub fn table_for(layout: InputLayout) -> &'static dyn core_layout::Layout {
@@ -714,7 +750,10 @@ mod tests {
             matches!(&committed.steps[2], Plan::Type(t) if t.ends_with(' ')),
             "the space is typed back"
         );
-        assert!(live.on_fix_hotkey(1).is_none(), "nothing is fixed twice");
+        // and a second press reads that back the other way: the press always
+        // converts, so it flips between the two spellings
+        let back = live.on_fix_hotkey(1).expect("the press converts back");
+        assert_eq!(back.corrected, "fvdw,h");
     }
 
     #[test]
@@ -760,15 +799,19 @@ mod tests {
     }
 
     #[test]
-    fn a_word_typed_correctly_is_not_flipped_even_by_the_hotkey() {
-        // a real word on screen stays put: an accidental press must not mangle it
+    fn the_hotkey_converts_even_a_real_word_on_screen() {
+        // Suvasin, 2026-11-10: a press is a deliberate act, so it converts what is
+        // under the cursor without judging whether it looks mistyped. "A real word
+        // stays put" belongs to the automatic path (see the boundary tests).
         let mut live = Live::new(InputLayout::ThaiKedmanee);
         live.mode = Mode::Manual;
         for c in "สวัสดี".chars() {
             live.on_char(c);
         }
-        assert!(live.on_fix_hotkey(1).is_none());
-        assert_eq!(live.skipped, 1);
+        let committed = live.on_fix_hotkey(1).expect("the press reads it the other way");
+        assert_eq!(committed.shown, "สวัสดี");
+        assert_eq!(layout_of(&committed.corrected), InputLayout::UsQwerty);
+        assert_eq!(live.skipped, 0);
     }
 
     #[test]
@@ -1067,6 +1110,82 @@ mod tests {
 /// [`config::DEFAULT_RECALL_SECONDS`], the newest fix for
 /// [`config::DEFAULT_UNDO_SECONDS`], and what the daemon can see happening
 /// (Escape, an arrow key, a layout switch) forgets both at once.
+/// The typist's own list: a pair of theirs beats every guess, and a word they
+/// keep as typed is never touched.
+#[cfg(test)]
+mod my_words_tests {
+    use super::*;
+
+    const WRONG: &str = "frdw,h";
+    const RIGHT: &str = "\u{e14}\u{e2d}\u{e01}\u{e44}\u{e21}\u{e49}";
+    const HELLO: &str = "\u{e2a}\u{e27}\u{e31}\u{e2a}\u{e14}\u{e35}";
+
+    fn typed(mode: Mode, text: &str) -> Live {
+        let mut live = Live::new(InputLayout::UsQwerty);
+        live.mode = mode;
+        for c in text.chars() {
+            live.on_char(c);
+        }
+        live
+    }
+
+    #[test]
+    fn a_pair_of_theirs_wins_on_the_press() {
+        let mut live = typed(Mode::Manual, WRONG);
+        assert!(live.words.add_pair(WRONG, RIGHT));
+        let committed = live.on_fix_hotkey(1).expect("their pair is applied");
+        assert_eq!(committed.corrected, RIGHT);
+    }
+
+    #[test]
+    fn a_pair_of_theirs_wins_at_a_boundary_too() {
+        let mut live = typed(Mode::Auto, WRONG);
+        assert!(live.words.add_pair(WRONG, RIGHT));
+        let committed = live.on_boundary(' ').expect("their pair is applied");
+        assert_eq!(committed.corrected, RIGHT);
+        assert!(
+            matches!(&committed.steps.last(), Some(Plan::Type(t)) if t == &format!("{RIGHT} ")),
+            "the boundary is typed back: {:?}",
+            committed.steps
+        );
+    }
+
+    #[test]
+    fn a_word_they_kept_is_never_touched() {
+        let mut live = typed(Mode::Both, WRONG);
+        assert!(live.words.keep_as_typed(WRONG));
+        assert!(live.on_fix_hotkey(1).is_none(), "the press leaves it alone");
+        assert_eq!(live.skipped, 1);
+
+        let mut live = typed(Mode::Auto, WRONG);
+        live.words.keep_as_typed(WRONG);
+        assert!(live.on_boundary(' ').is_none(), "the boundary leaves it alone");
+    }
+
+    #[test]
+    fn a_kept_thai_word_is_left_alone_as_well() {
+        let mut live = Live::new(InputLayout::ThaiKedmanee);
+        live.mode = Mode::Auto;
+        live.words.keep_as_typed(HELLO);
+        for c in HELLO.chars() {
+            live.on_char(c);
+        }
+        assert!(live.on_boundary(' ').is_none());
+    }
+
+    #[test]
+    fn a_boundary_hands_the_word_it_left_alone_to_the_learner() {
+        let mut live = Live::new(InputLayout::UsQwerty);
+        live.mode = Mode::Auto;
+        for c in "kubernetes".chars() {
+            live.on_char(c);
+        }
+        assert!(live.on_boundary(' ').is_none(), "nothing to fix here");
+        assert_eq!(live.take_left_word().as_deref(), Some("kubernetes"));
+        assert!(live.take_left_word().is_none(), "one word, one sighting");
+    }
+}
+
 #[cfg(test)]
 mod recall_window_tests {
     use super::*;

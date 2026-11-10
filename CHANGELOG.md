@@ -4,7 +4,19 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+
+- **My words**: a list of words that are never fixed, and a list of pairs
+  (`what I typed=what it should be`) applied at a space and on the fix hotkey. Words
+  arrive by hand, from three sightings of the same word, or by reversing one of our
+  fixes (a swap or Undo says "that spelling was right"). Both lists are edited in the
+  settings window and kept in `~/.config/openrtlinux/words.toml`.
+
 ### Changed
+
+- The fix hotkey now converts whatever is under the cursor instead of refusing when the
+  word on screen looks like a real word: "a real word stays put" remains a guard of the
+  automatic path, where nobody asked for the fix.
 
 - A new app icon: the light keycap with a shift arrow on the rounded blue tile,
   replacing the `A` + `ก` + exchange-arc mark, which was mush in the panel. The

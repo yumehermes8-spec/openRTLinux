@@ -131,6 +131,9 @@ def normalise_hotkey(text: object) -> str:
 CONFIG_PATH = Path(
     os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
 ) / APP / "config.toml"
+# The typist's own words. The daemon reads it, the daemon appends what it learns,
+# and this window edits it - one file, so `reload` is all the two sides need.
+WORDS_PATH = CONFIG_PATH.with_name("words.toml")
 SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"{APP}.sock"
 # ---------------------------------------------------------------- languages
 # The settings window and the tray menu speak Thai or English. The *behaviour* is
@@ -158,6 +161,16 @@ TEXTS = {
         "switch_key": "ปุ่มสลับแป้นของเดสก์ท็อป",
         "current_command": "คำสั่งอ่านแป้นปัจจุบัน",
         "autostart": "เปิด tray อัตโนมัติเมื่อ login",
+        "words": "คำของฉัน",
+        "words_learn": "เรียนรู้คำที่ฉันพิมพ์บ่อย (อัตโนมัติ)",
+        "words_learn_tip": "พิมพ์คำเดิมครบ 3 ครั้ง = จำว่าเป็นคำของฉัน แล้วจะไม่ถูกแก้ให้อีก",
+        "words_placeholder": "เพิ่มคำ เช่น kubernetes",
+        "words_add": "เพิ่มคำ",
+        "words_pair_wrong": "ที่พิมพ์ (ผิด)",
+        "words_pair_right": "ให้เป็น",
+        "words_pair_add": "เพิ่มคู่",
+        "words_remove_tip": "เอาออกจากรายการ",
+        "words_hint": "คำในรายการนี้จะไม่ถูกแก้ · คู่คำจะถูกแก้ให้ทันทีทั้งตอนเว้นวรรคและตอนกด hotkey",
         "note": ("<small>หมายเหตุ: พอร์ตนี้แก้คำเมื่อเคาะวรรค (auto) และเมื่อกด hotkey (manual) — "
                  "ฟีเจอร์ที่ต้องอ่านข้อความจากแอป (ghost suggestion, per-app) ยังไม่ได้ทำบน Wayland</small>"),
         "save": "บันทึกแล้วโหลดใหม่",
@@ -198,6 +211,16 @@ TEXTS = {
         "switch_key": "Desktop switch key",
         "current_command": "Read the active layout with",
         "autostart": "Start the tray at login",
+        "words": "My words",
+        "words_learn": "Learn words I keep typing (automatic)",
+        "words_learn_tip": "Three sightings of the same word keep it as mine - it is never fixed again",
+        "words_placeholder": "Add a word, e.g. kubernetes",
+        "words_add": "Add word",
+        "words_pair_wrong": "what I typed",
+        "words_pair_right": "what it should be",
+        "words_pair_add": "Add pair",
+        "words_remove_tip": "Remove from the list",
+        "words_hint": "Words here are never fixed - a pair is applied at a space and on the hotkey",
         "note": ("<small>Note: this port fixes a word on a boundary (auto) and on the fix hotkey "
                  "(manual) — features that need to read text from the app (ghost suggestion, "
                  "per-app rules) are not on Wayland yet</small>"),
@@ -350,7 +373,7 @@ class SettingsWindow(Gtk.Window):
         super().__init__(title=t("window_title"))
         self.tray = tray
         self.labels: dict[str, object] = {}
-        self.set_default_size(560, 380)
+        self.set_default_size(560, 620)
         self.set_border_width(12)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -435,6 +458,46 @@ class SettingsWindow(Gtk.Window):
         self.undo_button.set_sensitive(False)
         self.undo_button.connect("clicked", self.on_undo)
         box.pack_start(self.undo_button, False, False, 0)
+
+        # ---- the typist's own words: never fix these, and these pairs are theirs
+        self.labels["words"] = label_start(t("words"))
+        box.pack_start(self.labels["words"], False, False, 0)
+        self.words_learn = Gtk.CheckButton(label=t("words_learn"))
+        self.words_learn.set_tooltip_text(t("words_learn_tip"))
+        self.words_learn.connect("toggled", self.on_words_learn)
+        box.pack_start(self.words_learn, False, False, 0)
+
+        add_row = Gtk.Box(spacing=6)
+        self.word_entry = Gtk.Entry()
+        self.word_entry.set_placeholder_text(t("words_placeholder"))
+        self.word_entry.connect("activate", self.on_words_add)
+        add_row.pack_start(self.word_entry, True, True, 0)
+        self.labels["words_add"] = Gtk.Button(label=t("words_add"))
+        self.labels["words_add"].connect("clicked", self.on_words_add)
+        add_row.pack_start(self.labels["words_add"], False, False, 0)
+        box.pack_start(add_row, False, False, 0)
+        box.pack_start(self.word_list(), True, True, 0)
+
+        pair_row = Gtk.Box(spacing=6)
+        self.pair_wrong = Gtk.Entry()
+        self.pair_wrong.set_placeholder_text(t("words_pair_wrong"))
+        pair_row.pack_start(self.pair_wrong, True, True, 0)
+        self.pair_right = Gtk.Entry()
+        self.pair_right.set_placeholder_text(t("words_pair_right"))
+        self.pair_right.connect("activate", self.on_pair_add)
+        pair_row.pack_start(self.pair_right, True, True, 0)
+        self.labels["words_pair_add"] = Gtk.Button(label=t("words_pair_add"))
+        self.labels["words_pair_add"].connect("clicked", self.on_pair_add)
+        pair_row.pack_start(self.labels["words_pair_add"], False, False, 0)
+        box.pack_start(pair_row, False, False, 0)
+        box.pack_start(self.pair_list(), True, True, 0)
+
+        self.hint_words = Gtk.Label()
+        self.hint_words.set_xalign(0)
+        self.hint_words.set_halign(Gtk.Align.START)
+        self.hint_words.set_line_wrap(True)
+        self.hint_words.set_markup(t("words_hint"))
+        box.pack_start(self.hint_words, False, False, 0)
         self.ready = True
 
         buttons = Gtk.Box(spacing=8)
@@ -451,6 +514,157 @@ class SettingsWindow(Gtk.Window):
         self.load_config()
         self.reload_status()
         GLib.timeout_add(1500, self._tick)
+
+    # ---- the typist's own words
+    def word_list(self) -> Gtk.ScrolledWindow:
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(80)
+        self.words_box = Gtk.ListBox()
+        self.words_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        scroll.add(self.words_box)
+        return scroll
+
+    def pair_list(self) -> Gtk.ScrolledWindow:
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(70)
+        self.pairs_box = Gtk.ListBox()
+        self.pairs_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        scroll.add(self.pairs_box)
+        return scroll
+
+    def read_words(self) -> dict:
+        """The file the daemon reads, in the same shape: one key per line."""
+        data: dict = {"learn": False, "words": [], "pairs": []}
+        try:
+            text = WORDS_PATH.read_text()
+        except OSError:
+            return data
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if key == "learn":
+                data["learn"] = value in ("true", "1", "yes", "on")
+            elif key == "word" and value:
+                data["words"].append(value)
+            elif key == "pair" and "=" in value:
+                wrong, _, right = value.partition("=")
+                if wrong.strip() and right.strip():
+                    data["pairs"].append((wrong.strip(), right.strip()))
+        return data
+
+    def write_words(self, data: dict) -> str:
+        lines = [
+            "# openRTLinux - the typist's own words (this window writes it).",
+            "# word = never fix this one \u00b7 pair = what I typed=what it should be",
+            f"learn = {'true' if data['learn'] else 'false'}",
+        ]
+        lines += [f"word = {word}" for word in data["words"]]
+        lines += [f"pair = {wrong}={right}" for wrong, right in data["pairs"]]
+        try:
+            WORDS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            WORDS_PATH.write_text("\n".join(lines) + "\n")
+        except OSError as exc:
+            return f"could not save: {exc}"
+        ask("reload")  # the daemon re-reads both files, exactly like a config save
+        return "saved"
+
+    def render_words(self) -> None:
+        data = self.read_words()
+        try:
+            self.words_stamp = WORDS_PATH.stat().st_mtime_ns
+        except OSError:
+            self.words_stamp = None
+        self.words_learn.handler_block_by_func(self.on_words_learn)
+        self.words_learn.set_active(bool(data["learn"]))
+        self.words_learn.handler_unblock_by_func(self.on_words_learn)
+        for child in self.words_box.get_children():
+            self.words_box.remove(child)
+        for word in data["words"]:
+            self.words_box.add(self.words_row(word))
+        for child in self.pairs_box.get_children():
+            self.pairs_box.remove(child)
+        for wrong, right in data["pairs"]:
+            self.pairs_box.add(self.pairs_row(wrong, right))
+        self.words_box.show_all()
+        self.pairs_box.show_all()
+
+    def words_row(self, word: str) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow()
+        line = Gtk.Box(spacing=6)
+        line.pack_start(Gtk.Label(label=word, xalign=0), True, True, 0)
+        remove = Gtk.Button(label="\u00d7")
+        remove.set_tooltip_text(t("words_remove_tip"))
+        remove.connect("clicked", self.on_words_remove, word)
+        line.pack_end(remove, False, False, 0)
+        row.add(line)
+        return row
+
+    def pairs_row(self, wrong: str, right: str) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow()
+        line = Gtk.Box(spacing=6)
+        line.pack_start(Gtk.Label(label=f"{wrong}  \u2192  {right}", xalign=0), True, True, 0)
+        remove = Gtk.Button(label="\u00d7")
+        remove.set_tooltip_text(t("words_remove_tip"))
+        remove.connect("clicked", self.on_pair_remove, wrong)
+        line.pack_end(remove, False, False, 0)
+        row.add(line)
+        return row
+
+    def on_words_add(self, *_args) -> None:
+        word = self.word_entry.get_text().strip()
+        if not word:
+            return
+        data = self.read_words()
+        if word not in data["words"]:
+            data["words"].append(word)
+        self.write_words(data)
+        self.word_entry.set_text("")
+        self.render_words()
+
+    def on_words_remove(self, _button, word: str) -> None:
+        data = self.read_words()
+        data["words"] = [w for w in data["words"] if w != word]
+        self.write_words(data)
+        self.render_words()
+
+    def on_pair_add(self, *_args) -> None:
+        wrong = self.pair_wrong.get_text().strip()
+        right = self.pair_right.get_text().strip()
+        if not wrong or not right:
+            return
+        data = self.read_words()
+        data["pairs"] = [(w, r) for w, r in data["pairs"] if w != wrong] + [(wrong, right)]
+        self.write_words(data)
+        self.pair_wrong.set_text("")
+        self.pair_right.set_text("")
+        self.render_words()
+
+    def on_pair_remove(self, _button, wrong: str) -> None:
+        data = self.read_words()
+        data["pairs"] = [(w, r) for w, r in data["pairs"] if w != wrong]
+        self.write_words(data)
+        self.render_words()
+
+    def on_words_learn(self, button) -> None:
+        if not getattr(self, "ready", False):
+            return
+        data = self.read_words()
+        data["learn"] = bool(button.get_active())
+        self.write_words(data)
+
+    def refresh_words_if_changed(self) -> None:
+        """Show what the daemon learned, without rebuilding the list every tick."""
+        try:
+            stamp = WORDS_PATH.stat().st_mtime_ns
+        except OSError:
+            stamp = None
+        if stamp != getattr(self, "words_stamp", "unset"):
+            self.render_words()
 
     # ---- config file
     @staticmethod
@@ -509,6 +723,12 @@ class SettingsWindow(Gtk.Window):
         self.autostart.set_label(t("autostart"))
         self.hotkey.set_tooltip_text(t("hotkey_tip"))
         self.hint.set_markup(t("note"))
+        self.words_learn.set_label(t("words_learn"))
+        self.words_learn.set_tooltip_text(t("words_learn_tip"))
+        self.word_entry.set_placeholder_text(t("words_placeholder"))
+        self.pair_wrong.set_placeholder_text(t("words_pair_wrong"))
+        self.pair_right.set_placeholder_text(t("words_pair_right"))
+        self.hint_words.set_markup(t("words_hint"))
         self.undo_button.set_label(t("undo"))
         self.undo_button.set_tooltip_text(t("undo_tip"))
         chosen = self.mode.get_active_id()
@@ -579,6 +799,7 @@ class SettingsWindow(Gtk.Window):
         suffix = f"  [{status['error']}]" if "error" in status else ""
         self.status.set_text(describe(status) + suffix)
         self.render_history(status)
+        self.refresh_words_if_changed()
         return False
 
     def _tick(self) -> bool:
@@ -836,6 +1057,11 @@ def main() -> int:
             if window.labels[key].get_parent() is None
         ]
         print(f"  hidden rows: {', '.join(hidden) if hidden else 'none'}")
+        words = window.read_words()
+        print(
+            f"  my words: {len(words['words'])} kept \u00b7 {len(words['pairs'])} pair(s) "
+            f"\u00b7 learn {words['learn']} \u00b7 {WORDS_PATH}"
+        )
         print(f"  language: {LANG} ({'override' if args.lang else 'from config/environment'})")
         print(f"  sample: {t('window_title')} | {t('save')} | {mode_label('manual')}")
         print(f"  gate: GTK3 yes · tray {'yes' if tray else 'no'} · config {CONFIG_PATH}")

@@ -439,3 +439,50 @@ applies the plans to it, including the application's own keystroke, then presses
 chord three and ten times and checks the whole sentence - not just the word. Ten presses
 used to leave the text a character shorter each time; that is the test to keep.
 
+## My words, and a press that always converts (2026-11-10)
+
+Two things Suvasin asked for after using it: a place for *his* vocabulary (some programs
+are not about the layout at all), and a fix hotkey that fixes without judging.
+
+**The chord converts, always.** `Live::decide` used to refuse when the word on screen was
+a real word ("an accidental press must not mangle it"). That guard belongs to the
+automatic path, where nobody asked: the press is a deliberate act, so it now takes the
+word checker's answer if it has one and otherwise the other layout's reading, period -
+real word or not. The boundary path still refuses real words (`tests::english_words_are_left_alone`).
+
+**The typist's own words** live in `~/.config/openrtlinux/words.toml`, which both the
+daemon and the settings window edit:
+
+```text
+learn = true
+word = kubernetes
+pair = frdw,h=ดอกไม้
+```
+
+* `word` - never fix this one. Three ways in: typed by hand in the settings window,
+  [`Words::observe`] after the same English word is left alone at three boundaries (only
+  with `learn = true`), or `keep_as_typed` when the typist reverses one of our fixes - a
+  swap or the Undo button is an explicit "that spelling was right", so it is learned even
+  with `learn = false`.
+* `pair` - `what I typed=what it should be`. Checked before every other rule, applied at a
+  boundary *and* on the chord: an exact string the typist typed is not a guess.
+* The words join the live dictionaries (`Dictionary::learn`), so the automatic path, the
+  second opinion and the chord all see them with no further change. Guards before a word
+  is kept: letters of one script, 3-20 (Thai 2-30) characters, not ALL CAPS, not shaped
+  like code (`code::looks_like_identifier`), not already in the bundled or tech lists.
+
+**Repeated-key lines, not TOML.** `word = …` may appear many times; there is nothing to
+escape in Thai, and a half-written line costs one word instead of the file. Both writers
+(the daemon appending what it learned, the window editing) re-read the file before
+writing, so the last writer never clobbers the other.
+
+**A locked screen disables user extensions, and that looks like a bug.** GNOME 45+ runs
+extensions in `user` session mode only: while the lock screen is up, `quick-lang-switch`
+(which makes the switch key fast) and `ubuntu-appindicators` (which draws the tray) are
+**INACTIVE**. The switch key then does nothing, so a fix that has to switch the layout
+fails with `could not apply it: the desktop did not switch to ThaiKedmanee` in the
+journal, and the tray icon is missing. Check `gnome-extensions info <uuid> | grep State`
+and `org.gnome.ScreenSaver.GetActive` before hunting for a bug in the daemon.
+
+[`Words::observe`]: crate::linuxos::words::Words::observe
+

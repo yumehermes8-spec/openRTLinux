@@ -22,3 +22,4 @@ pub mod inject;
 pub mod keytable;
 pub mod layout;
 pub mod live;
+pub mod words;
