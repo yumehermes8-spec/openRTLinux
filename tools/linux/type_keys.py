@@ -3,6 +3,8 @@
 
     python3 tools/linux/type_keys.py "fvdw,h "     # type those physical keys
     python3 tools/linux/type_keys.py switch        # press the layout switch key (grave)
+    python3 tools/linux/type_keys.py pause         # Ctrl+Alt+P, the pause chord
+    python3 tools/linux/type_keys.py ctrl-alt-p    # the same thing, spelled out
 
 Needs read/write access to /dev/uinput (uaccess ACL or the `input` group). It is
 a *test* device on purpose: openrtlinux filters only its own "openRTLinux virtual
@@ -106,6 +108,21 @@ def main() -> int:
         time.sleep(hold)
         u.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
         u.syn()
+    elif what in ("pause", "ctrl-alt-p"):
+        # the pause chord: a shortcut, so it is sent with the modifiers held
+        time.sleep(0.1)
+        for code in (e.KEY_LEFTCTRL, e.KEY_LEFTALT):
+            u.write(e.EV_KEY, code, 1)
+            u.syn()
+            time.sleep(0.05)
+        for value in (1, 0):
+            u.write(e.EV_KEY, e.KEY_P, value)
+            u.syn()
+            time.sleep(0.05)
+        for code in (e.KEY_LEFTALT, e.KEY_LEFTCTRL):
+            u.write(e.EV_KEY, code, 0)
+            u.syn()
+            time.sleep(0.05)
     elif what == "switch":
         for value in (1, 0):
             u.write(e.EV_KEY, e.KEY_GRAVE, value)

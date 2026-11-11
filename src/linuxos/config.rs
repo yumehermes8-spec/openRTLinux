@@ -130,6 +130,11 @@ pub struct Config {
     pub recall_seconds: u64,
     /// Seconds the newest fix can still be swapped back or undone (0 = never).
     pub undo_seconds: u64,
+    /// Leave code alone: never touch a name-shaped token (`camelCase`,
+    /// `snake_case`, `CONSTANT`, digits, `_.::->`), and put Thai back as English
+    /// when what it reads as is a name. Off by default: with it on, the fix chord
+    /// stops converting those too.
+    pub code_guard: bool,
 }
 
 impl Default for Config {
@@ -144,6 +149,7 @@ impl Default for Config {
             fix_word_hotkey: "shift+backspace".to_string(),
             recall_seconds: DEFAULT_RECALL_SECONDS,
             undo_seconds: DEFAULT_UNDO_SECONDS,
+            code_guard: false,
         }
     }
 }

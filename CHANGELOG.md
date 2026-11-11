@@ -6,6 +6,14 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Added
 
+- **Ctrl+Alt+P** pauses the fixing and brings it back without opening the tray; the
+  tray icon turns grey while it is paused.
+- **About** in the settings window: the version the running daemon reports, a link to the
+  repository, and a **Check for updates** button (one GitHub API request, versions
+  compared as numbers, nothing downloaded).
+- **Code mode** (`code_guard`, off by default): never touch a name-shaped token, and put
+  Thai back as English when what it reads as is a name - `suvasin` typed on the Thai
+  keyboard is invisible to the dictionaries.
 - **My words**: a list of words that are never fixed, and a list of pairs
   (`what I typed=what it should be`) applied at a space and on the fix hotkey. Words
   arrive by hand, from three sightings of the same word, or by reversing one of our
@@ -14,6 +22,10 @@ All notable changes to RightType. Versions follow [Semantic Versioning](https://
 
 ### Changed
 
+- A word kept as typed ("that spelling was right") is shape-checked before it is
+  remembered: the first real swap stored `vvdde]y'`, which was a stuck key, not a word.
+- `auto` mode keeps the swap from its last fix, so the settings window's Undo works in
+  every mode instead of only in `both`.
 - The fix hotkey now converts whatever is under the cursor instead of refusing when the
   word on screen looks like a real word: "a real word stays put" remains a guard of the
   automatic path, where nobody asked for the fix.

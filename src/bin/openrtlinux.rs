@@ -272,6 +272,7 @@ fn main() {
     live.undo_ms = config::window_ms(cfg.undo_seconds);
     live.words = words::Words::load(&words::path());
     live.words.teach_dictionaries();
+    live.code_guard = cfg.code_guard;
 
     // The tray and the settings window talk to us here.
     let control = match control::Control::start(control::Status {
@@ -319,6 +320,8 @@ fn main() {
     // The recall windows are measured against this, never against wall time: a
     // clock step (or a suspended laptop) must not expire a word early.
     let clock = Instant::now();
+    // What the pause chord was pressed from, so pressing it again comes back here.
+    let mut pause_from: Option<config::Mode> = None;
     'daemon: loop {
         if control.quitting() {
             println!("openrtlinux: asked to quit");
@@ -332,6 +335,7 @@ fn main() {
             // list up the same way it picks up config.toml
             live.words = words::Words::load(&words::path());
             live.words.teach_dictionaries();
+            live.code_guard = cfg.code_guard;
             println!("  words: {}", describe_words(&live.words));
             chord = os_layout::switch_chord(&cfg.switch_command);
             if cfg.fix_chord() != fix_chord {
@@ -379,6 +383,26 @@ fn main() {
                     live.current_word(),
                     live.mode.as_str()
                 );
+            }
+            // The pause chord: one press stops the fixing, another brings it back,
+            // without opening the tray. A plain chord would collide with typing, so
+            // this is the one place shortcuts are read.
+            if is_pause_chord(key.code, &mods) {
+                let (next, note) = match pause_from.take() {
+                    Some(back) => (back, "resumed"),
+                    None => {
+                        pause_from = Some(live.mode);
+                        (config::Mode::Off, "paused")
+                    }
+                };
+                live.mode = next;
+                // the socket is what the tray reads, so it has to say so too
+                control.update(|status| status.mode = next);
+                println!(
+                    "openRTLinux: fixing {note} by the pause chord (now {})",
+                    next.as_str()
+                );
+                continue;
             }
             if mods.ctrl || mods.alt || mods.meta {
                 continue; // a shortcut, not typing
@@ -581,6 +605,12 @@ fn main() {
         sleep(Duration::from_millis(2));
     }
     control.stop();
+}
+
+/// Ctrl+Alt+P: the pause chord. Chosen because it is not a typing key and rarely
+/// a program's own shortcut; the About section of the settings window says so.
+fn is_pause_chord(code: u16, mods: &kb_capture::Mods) -> bool {
+    code == KeyCode::KEY_P.0 && mods.ctrl && mods.alt && !mods.meta
 }
 
 /// A swap is the typist saying "the first spelling was right": keep it as typed,

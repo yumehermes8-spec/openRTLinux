@@ -192,7 +192,7 @@ fn handle(request: &str, shared: &Arc<Mutex<Shared>>) -> String {
     let rest: String = parts.collect::<Vec<_>>().join(" ");
     match command {
         "status" => match shared.lock() {
-            Ok(shared) => status_json(&shared.status, true),
+            Ok(shared) => status_json(&shared.status),
             Err(_) => "{\"error\":\"state poisoned\"}".into(),
         },
         "set" => set(&arg.to_string(), &rest, shared),
@@ -245,7 +245,7 @@ fn escaped(text: &str) -> String {
 
 /// The one place the wire format is written: keep it valid JSON, and escape
 /// everything that came from the typist's own keyboard.
-pub fn status_json(status: &Status, pretty: bool) -> String {
+pub fn status_json(status: &Status) -> String {
     let history: Vec<String> = status
         .history
         .iter()

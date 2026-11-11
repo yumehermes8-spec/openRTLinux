@@ -21,6 +21,9 @@ import argparse
 import fcntl
 import json
 import os
+import re
+import threading
+import urllib.request
 import socket
 import subprocess
 import time
@@ -134,6 +137,43 @@ CONFIG_PATH = Path(
 # The typist's own words. The daemon reads it, the daemon appends what it learns,
 # and this window edits it - one file, so `reload` is all the two sides need.
 WORDS_PATH = CONFIG_PATH.with_name("words.toml")
+
+# Where this port lives, for the About section and its update check.
+REPO = "yumehermes8-spec/openRTLinux"
+REPO_URL = f"https://github.com/{REPO}"
+RELEASES_URL = f"{REPO_URL}/releases"
+# The pause chord the daemon reads (see `is_pause_chord` in the daemon).
+PAUSE_CHORD = "Ctrl+Alt+P"
+
+
+def version_parts(text: str) -> list:
+    """`v0.4.0` -> [0, 4, 0]; anything unparseable counts as zero."""
+    return [int(bit) if bit.isdigit() else 0 for bit in re.split(r"[.\-+]", text.strip().lstrip("vV"))] or [0]
+
+
+def is_newer(latest: str, running: str) -> bool:
+    """Numbers, not strings: 0.10.0 is newer than 0.9.9."""
+    a, b = version_parts(latest), version_parts(running)
+    return (a + [0] * len(b)) > (b + [0] * len(a))
+
+
+def fetch_latest_release() -> dict:
+    """The newest release from the GitHub API - only the update button calls it.
+
+    RightType itself never goes online; this is one request the typist asks for, on
+    the button, and the answer is shown as text. Nothing is downloaded or run.
+    """
+    url = f"https://api.github.com/repos/{REPO}/releases/latest"
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "openRTLinux-settings", "Accept": "application/vnd.github+json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=8) as reply:
+            data = json.loads(reply.read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001 - offline, rate-limited, renamed repo
+        return {"error": f"{type(exc).__name__}: {exc}"}
+    return {"tag": str(data.get("tag_name", "")), "url": str(data.get("html_url", ""))}
 SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"{APP}.sock"
 # ---------------------------------------------------------------- languages
 # The settings window and the tray menu speak Thai or English. The *behaviour* is
@@ -171,6 +211,17 @@ TEXTS = {
         "words_pair_add": "เพิ่มคู่",
         "words_remove_tip": "เอาออกจากรายการ",
         "words_hint": "คำในรายการนี้จะไม่ถูกแก้ · คู่คำจะถูกแก้ให้ทันทีทั้งตอนเว้นวรรคและตอนกด hotkey",
+        "about": "เกี่ยวกับ",
+        "version": "เวอร์ชัน",
+        "releases": "ดู release ทั้งหมด",
+        "update": "ตรวจอัปเดต",
+        "update_checking": "กำลังตรวจ…",
+        "update_current": "เป็นเวอร์ชันล่าสุดแล้ว ({v})",
+        "update_available": "มีเวอร์ชันใหม่: {latest}",
+        "update_failed": "ตรวจไม่ได้: {why}",
+        "pause_hint": "พัก/แก้ต่อ: กด <b>{chord}</b> (ไม่ต้องเปิดถาด)",
+        "code_guard": "ไม่แตะคำที่เป็นโค้ด (camelCase, snake_case, ALLCAPS, มีตัวเลข)",
+        "code_guard_tip": "โหมดโค้ด: ชื่อในโค้ดไม่ใช่คำพิมพ์ผิด และไทยที่อ่านออกมาเป็นชื่อจะถูกแก้กลับเป็นอังกฤษ · เปิดแล้วปุ่ม hotkey ก็จะไม่แก้คำทรงนี้เช่นกัน",
         "note": ("<small>หมายเหตุ: พอร์ตนี้แก้คำเมื่อเคาะวรรค (auto) และเมื่อกด hotkey (manual) — "
                  "ฟีเจอร์ที่ต้องอ่านข้อความจากแอป (ghost suggestion, per-app) ยังไม่ได้ทำบน Wayland</small>"),
         "save": "บันทึกแล้วโหลดใหม่",
@@ -221,6 +272,17 @@ TEXTS = {
         "words_pair_add": "Add pair",
         "words_remove_tip": "Remove from the list",
         "words_hint": "Words here are never fixed - a pair is applied at a space and on the hotkey",
+        "about": "About",
+        "version": "Version",
+        "releases": "All releases",
+        "update": "Check for updates",
+        "update_checking": "Checking…",
+        "update_current": "This is the newest version ({v})",
+        "update_available": "A newer version exists: {latest}",
+        "update_failed": "Could not check: {why}",
+        "pause_hint": "Pause / resume: press <b>{chord}</b> (no need to open the tray)",
+        "code_guard": "Leave code alone (camelCase, snake_case, ALLCAPS, digits)",
+        "code_guard_tip": "Code mode: a name in code is not a typo, and Thai that reads as a name goes back to English · with it on, the fix hotkey leaves those alone too",
         "note": ("<small>Note: this port fixes a word on a boundary (auto) and on the fix hotkey "
                  "(manual) — features that need to read text from the app (ghost suggestion, "
                  "per-app rules) are not on Wayland yet</small>"),
@@ -434,6 +496,11 @@ class SettingsWindow(Gtk.Window):
         grid.attach(self.autostart, 1, row, 1, 1)
         row += 1
 
+        self.code_guard = Gtk.CheckButton(label=t("code_guard"))
+        self.code_guard.set_tooltip_text(t("code_guard_tip"))
+        grid.attach(self.code_guard, 1, row, 1, 1)
+        row += 1
+
         hint = Gtk.Label()
         hint.set_xalign(0)
         hint.set_halign(Gtk.Align.START)
@@ -491,6 +558,26 @@ class SettingsWindow(Gtk.Window):
         pair_row.pack_start(self.labels["words_pair_add"], False, False, 0)
         box.pack_start(pair_row, False, False, 0)
         box.pack_start(self.pair_list(), True, True, 0)
+
+        self.labels["about"] = label_start(t("about"))
+        box.pack_start(self.labels["about"], False, False, 0)
+        self.version_label = Gtk.Label(xalign=0)
+        box.pack_start(self.version_label, False, False, 0)
+        self.pause_label = Gtk.Label(xalign=0)
+        self.pause_label.set_line_wrap(True)
+        box.pack_start(self.pause_label, False, False, 0)
+        self.link = Gtk.LinkButton(uri=REPO_URL, label=REPO_URL)
+        box.pack_start(self.link, False, False, 0)
+        update_row = Gtk.Box(spacing=8)
+        self.labels["update"] = Gtk.Button(label=t("update"))
+        self.labels["update"].connect("clicked", self.on_check_update)
+        update_row.pack_start(self.labels["update"], False, False, 0)
+        self.update_status = Gtk.Label(xalign=0)
+        self.update_status.set_line_wrap(True)
+        update_row.pack_start(self.update_status, True, True, 0)
+        box.pack_start(update_row, False, False, 0)
+        self.release_link = Gtk.LinkButton(uri=RELEASES_URL, label=t("releases"))
+        box.pack_start(self.release_link, False, False, 0)
 
         self.hint_words = Gtk.Label()
         self.hint_words.set_xalign(0)
@@ -657,6 +744,31 @@ class SettingsWindow(Gtk.Window):
         data["learn"] = bool(button.get_active())
         self.write_words(data)
 
+    # ---- about and updates
+    def on_check_update(self, *_args) -> None:
+        self.labels["update"].set_sensitive(False)
+        self.update_status.set_text(t("update_checking"))
+
+        def work() -> None:
+            result = fetch_latest_release()
+            GLib.idle_add(self.show_update_result, result)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def show_update_result(self, result: dict) -> None:
+        self.labels["update"].set_sensitive(True)
+        if "error" in result:
+            self.update_status.set_text(t("update_failed").format(why=result["error"]))
+            return
+        running = getattr(self, "running_version", None) or "?"
+        if is_newer(result["tag"], running):
+            self.update_status.set_text(
+                t("update_available").format(latest=result["tag"])
+            )
+            self.release_link.set_uri(result.get("url") or RELEASES_URL)
+        else:
+            self.update_status.set_text(t("update_current").format(v=running))
+
     def refresh_words_if_changed(self) -> None:
         """Show what the daemon learned, without rebuilding the list every tick."""
         try:
@@ -679,6 +791,7 @@ class SettingsWindow(Gtk.Window):
             "tray_autostart": False,
             "layout": "",
             "fix_word_hotkey": "shift+backspace",
+            "code_guard": False,
         }
 
     def load_config(self) -> None:  # noqa: D401
@@ -700,6 +813,7 @@ class SettingsWindow(Gtk.Window):
         self.switch_key.set_text(str(data.get("switch_command", "")))
         self.current_command.set_text(str(data.get("current_command", "")))
         self.autostart.set_active(bool(data.get("tray_autostart", False)))
+        self.code_guard.set_active(bool(data.get("code_guard", False)))
 
     def on_language(self, *_args) -> None:
         """Preview the choice at once; saving is what stores it."""
@@ -723,6 +837,11 @@ class SettingsWindow(Gtk.Window):
         self.autostart.set_label(t("autostart"))
         self.hotkey.set_tooltip_text(t("hotkey_tip"))
         self.hint.set_markup(t("note"))
+        self.code_guard.set_label(t("code_guard"))
+        self.code_guard.set_tooltip_text(t("code_guard_tip"))
+        self.pause_label.set_markup(t("pause_hint").format(chord=PAUSE_CHORD))
+        if hasattr(self, "release_link"):
+            self.release_link.set_label(t("releases"))
         self.words_learn.set_label(t("words_learn"))
         self.words_learn.set_tooltip_text(t("words_learn_tip"))
         self.word_entry.set_placeholder_text(t("words_placeholder"))
@@ -751,6 +870,7 @@ class SettingsWindow(Gtk.Window):
         self.config["switch_command"] = self.switch_key.get_text()
         self.config["current_command"] = self.current_command.get_text()
         self.config["tray_autostart"] = self.autostart.get_active()
+        self.config["code_guard"] = self.code_guard.get_active()
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(toml_dump(self.config))
         apply_autostart(self.config["tray_autostart"])
@@ -798,6 +918,8 @@ class SettingsWindow(Gtk.Window):
         status = ask("status")
         suffix = f"  [{status['error']}]" if "error" in status else ""
         self.status.set_text(describe(status) + suffix)
+        self.running_version = str(status.get("version", "")) or None
+        self.version_label.set_text(f"{t('version')} {self.running_version or '?'}")
         self.render_history(status)
         self.refresh_words_if_changed()
         return False
@@ -1062,6 +1184,7 @@ def main() -> int:
             f"  my words: {len(words['words'])} kept \u00b7 {len(words['pairs'])} pair(s) "
             f"\u00b7 learn {words['learn']} \u00b7 {WORDS_PATH}"
         )
+        print(f"  about: {window.version_label.get_text()} \u00b7 {REPO_URL} \u00b7 pause {PAUSE_CHORD}")
         print(f"  language: {LANG} ({'override' if args.lang else 'from config/environment'})")
         print(f"  sample: {t('window_title')} | {t('save')} | {mode_label('manual')}")
         print(f"  gate: GTK3 yes · tray {'yes' if tray else 'no'} · config {CONFIG_PATH}")

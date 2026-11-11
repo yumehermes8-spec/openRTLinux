@@ -486,3 +486,38 @@ and `org.gnome.ScreenSaver.GetActive` before hunting for a bug in the daemon.
 
 [`Words::observe`]: crate::linuxos::words::Words::observe
 
+## The pause chord, code mode, and About (2026-11-11)
+
+**Ctrl+Alt+P pauses the fixing** and the same chord brings it back, without opening the
+tray: the daemon remembers what it was paused from. A plain chord would collide with
+typing, so this is the one place the loop reads a shortcut before the
+`ctrl/alt/meta -> skip` line, and it writes the mode into the control socket as well -
+otherwise the next loop turn would put the old mode back and the tray icon would never
+turn grey. `type_keys.py pause` sends it for tests.
+
+**Code mode** (`code_guard`, off by default, a checkbox in the settings window and a key
+in `config.toml`): never touch something shaped like a name (`code::looks_like_identifier`
+- `camelCase`, `snake_case`, `CONSTANT`, digits, `_ . :: ->`), and put Thai back as English
+when what it reads as is a name rather than Thai words
+(`code::thai_keys_look_like_code`, which also needs the Thai not to be fully known). The
+second half is the useful one: `suvasin` typed on the Thai keyboard is a name the
+dictionaries cannot see, so the ordinary path leaves it alone. Verified live both ways:
+with the guard on the boundary turned the Thai back into `suvasin`, with it off the same
+keys were left alone. Note it also stops the **fix chord** from converting those tokens,
+which is the trade-off of having it on.
+
+**About** (bottom of the settings window): the version comes from the daemon's `status`
+(so it is the number the running binary reports, not the file's), the repo link opens
+GitHub, and **Check for updates** makes one request to
+`https://api.github.com/repos/<owner>/<repo>/releases/latest` on the button - in a thread,
+with an 8 s timeout, and the answer is text. The versions are compared as numbers, not
+strings (`0.10.0` is newer than `0.9.9`). Nothing is downloaded, and nothing goes online
+without the button; if the request fails (offline, rate limit) the window says why.
+
+**Two smaller fixes from the same day.** `Words::keep_as_typed` is shape-checked now: the
+first real swap remembered `vvdde]y'`, because a swap can fire while a key is stuck or a
+word is half-typed, and a list that fills with junk is a list nobody trusts (it stays
+looser than the automatic half - two letters are fine when a person decided). And `auto`
+mode keeps a `swap` now, so the settings window's Undo works there too; it used to be
+`both` only, which left that mode with a dead button.
+

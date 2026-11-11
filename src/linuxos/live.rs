@@ -19,6 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::buffer::{Key, WordBuffer};
 use crate::dict;
+use crate::code;
 use crate::linuxos::config::{self, Mode};
 use crate::linuxos::words::Words;
 use crate::layout as core_layout;
@@ -105,6 +106,10 @@ pub struct Live {
     /// The typist's own words: never touch these, and these pairs are what they
     /// said they are.
     pub words: Words,
+    /// Leave code alone: a name-shaped English token is code, not a typo, and Thai
+    /// that reads as a name is a name typed on the Thai keyboard. Off by default -
+    /// with it on the fix chord stops converting those too (Suvasin's "code mode").
+    pub code_guard: bool,
     /// The millisecond clock the recall windows are measured against. The daemon
     /// sets it from its own `Instant` before each decision; the tests move it by
     /// hand instead of sleeping.
@@ -139,6 +144,7 @@ impl Live {
             before_backspace: None,
             left: None,
             words: Words::default(),
+            code_guard: false,
             now: 0,
             recall_ms: config::window_ms(config::DEFAULT_RECALL_SECONDS),
             undo_ms: config::window_ms(config::DEFAULT_UNDO_SECONDS),
@@ -417,6 +423,11 @@ impl Live {
         if self.words.protects(shown) {
             return None;
         }
+        // Shaped like code, with the typist asking for those to be left alone: a
+        // name is not a typo, and converting one is work they have to undo.
+        if self.code_guard && code::looks_like_identifier(shown) {
+            return None;
+        }
         // The word checker, which understands compounds and trailing marks.
         if let Some(detection) =
             policy::detect_token(shown, self.layout, dict::english(), dict::thai())
@@ -460,6 +471,21 @@ impl Live {
         if self.words.resolve(&shown).is_some() {
             return self.plan_fix(shown, 0, boundary.to_string(), true);
         }
+        // Code mode: a name-looking English token is code, not a typo ...
+        if self.code_guard && code::looks_like_identifier(&shown) {
+            self.left = Some(shown.clone());
+            self.pending = Some(Remembered {
+                word: shown,
+                separator: boundary.to_string(),
+                at: self.now,
+            });
+            return None;
+        }
+        // ... and Thai that reads as a name is a name somebody typed on the Thai
+        // keyboard, which the dictionaries cannot see (a name is not a word).
+        if self.code_guard && code::thai_keys_look_like_code(&shown, dict::thai()) {
+            return self.plan_fix(shown, 0, boundary.to_string(), true);
+        }
         if !matches!(self.mode, Mode::Auto | Mode::Both) {
             // manual: the word is on screen, waiting for the hotkey
             self.left = Some(shown.clone());
@@ -501,8 +527,10 @@ impl Live {
         self.layout = target;
         self.committed += 1;
         self.remember(&shown, &corrected, "fix");
-        if self.mode == Mode::Both {
-            // remember both spellings: the hotkey swaps between them
+        {
+            // Remember both spellings, in every mode: the hotkey swaps between them
+            // in `both`, and the settings window's Undo puts the fix back in any
+            // mode (it was `both` only, so `auto` had a dead Undo button).
             self.swap = Some(Swap {
                 wrong: shown.clone(),
                 right: corrected.clone(),
@@ -1152,13 +1180,33 @@ mod my_words_tests {
 
     #[test]
     fn a_word_they_kept_is_never_touched() {
-        let mut live = typed(Mode::Both, WRONG);
-        assert!(live.words.keep_as_typed(WRONG));
+        // a real Thai word: the press converts it when nobody said otherwise ...
+        let converts = {
+            let mut live = Live::new(InputLayout::ThaiKedmanee);
+            live.mode = Mode::Both;
+            for c in HELLO.chars() {
+                live.on_char(c);
+            }
+            live.on_fix_hotkey(1).is_some()
+        };
+        assert!(converts, "the chord converts a real word when it was not kept");
+
+        // ... and leaves it alone once the typist has kept it
+        let mut live = Live::new(InputLayout::ThaiKedmanee);
+        live.mode = Mode::Both;
+        assert!(live.words.keep_as_typed(HELLO));
+        for c in HELLO.chars() {
+            live.on_char(c);
+        }
         assert!(live.on_fix_hotkey(1).is_none(), "the press leaves it alone");
         assert_eq!(live.skipped, 1);
 
-        let mut live = typed(Mode::Auto, WRONG);
-        live.words.keep_as_typed(WRONG);
+        let mut live = Live::new(InputLayout::ThaiKedmanee);
+        live.mode = Mode::Auto;
+        live.words.keep_as_typed(HELLO);
+        for c in HELLO.chars() {
+            live.on_char(c);
+        }
         assert!(live.on_boundary(' ').is_none(), "the boundary leaves it alone");
     }
 
@@ -1314,6 +1362,78 @@ mod recall_window_tests {
     }
 }
 
+
+/// Code mode (opt-in): names are not typos, and a name typed on the Thai keyboard
+/// is worth putting back as English even though no dictionary knows it.
+#[cfg(test)]
+mod code_guard_tests {
+    use super::*;
+
+    fn typed(mode: Mode, text: &str) -> Live {
+        let mut live = Live::new(InputLayout::UsQwerty);
+        live.mode = mode;
+        live.code_guard = true;
+        for c in text.chars() {
+            live.on_char(c);
+        }
+        live
+    }
+
+    #[test]
+    fn a_name_is_not_a_typo() {
+        for name in ["myVariable", "snake_case", "MAX_SIZE", "utf8", "a.b"] {
+            let mut live = typed(Mode::Both, name);
+            assert!(
+                live.on_fix_hotkey(1).is_none(),
+                "the press leaves {name} alone"
+            );
+            let mut live = typed(Mode::Auto, name);
+            assert!(
+                live.on_boundary(' ').is_none(),
+                "the boundary leaves {name} alone"
+            );
+        }
+    }
+
+    #[test]
+    fn with_code_mode_off_a_name_is_still_convertible() {
+        let mut live = Live::new(InputLayout::UsQwerty);
+        live.mode = Mode::Both;
+        for c in "myVariable".chars() {
+            live.on_char(c);
+        }
+        assert!(live.on_fix_hotkey(1).is_some(), "the press converts, as asked");
+    }
+
+    #[test]
+    fn a_name_typed_on_the_thai_keyboard_goes_back_to_english() {
+        let mut live = Live::new(InputLayout::ThaiKedmanee);
+        live.mode = Mode::Auto;
+        live.code_guard = true;
+        let thai = ["suvasin", "kubernetes", "myapp", "dockercompose"]
+            .iter()
+            .map(|name| core_layout::en_to_th(name))
+            .find(|th| code::thai_keys_look_like_code(th, dict::thai()))
+            .expect("a name the guard recognises");
+        for c in thai.chars() {
+            live.on_char(c);
+        }
+        let committed = live.on_boundary(' ').expect("the name goes back to English");
+        assert_eq!(layout_of(&committed.corrected), InputLayout::UsQwerty);
+    }
+
+    #[test]
+    fn thai_prose_is_not_treated_as_code() {
+        // real Thai words keep their own shape check: they are not names
+        let mut live = Live::new(InputLayout::ThaiKedmanee);
+        live.mode = Mode::Auto;
+        live.code_guard = true;
+        for c in "\u{e14}\u{e2d}\u{e01}\u{e44}\u{e21}\u{e49}".chars() {
+            live.on_char(c);
+        }
+        assert!(live.on_boundary(' ').is_none(), "a Thai word stays Thai");
+    }
+}
 
 /// The repeated press, against a stand-in for the focused text box.
 ///

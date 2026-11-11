@@ -179,8 +179,18 @@ impl Words {
 
     /// "That was right as I typed it" - the typist reversed one of our fixes.
     /// Learned even with the automatic half off, because it is not a guess.
+    ///
+    /// Still shape-checked, and looser than the automatic half: a swap can fire
+    /// while a key is stuck or a word is half-typed, and a list that slowly fills
+    /// with junk is a list nobody trusts (the first `vvdde]y'` arrived that way,
+    /// because the `]` and `'` were still keys the typist meant to press). Two
+    /// letters are enough: `ok` is a word a person can decide to keep.
     pub fn keep_as_typed(&mut self, word: &str) -> bool {
-        self.add(word)
+        let word = tidy(word);
+        if keepable(&word) {
+            return self.add(&word);
+        }
+        false
     }
 
     /// One sighting of a finished English word. After [`REPEATS`] of them it is
@@ -245,6 +255,26 @@ pub fn eligible_english(word: &str) -> bool {
     let len = word.chars().count();
     if !(MIN_LEN..=MAX_LEN).contains(&len) {
         return false;
+    }
+    if !word.chars().all(|c| c.is_ascii_alphabetic() || c == '-' || c == '\'') {
+        return false;
+    }
+    if word.chars().all(|c| c.is_ascii_uppercase()) {
+        return false;
+    }
+    !looks_like_identifier(word)
+}
+
+/// Worth keeping when a person just said so: letters of one script (plus the
+/// hyphen and apostrophe English words carry), the length a word can be, not ALL
+/// CAPS, not shaped like code.
+pub fn keepable(word: &str) -> bool {
+    let len = word.chars().count();
+    if !(2..=MAX_THAI_LEN).contains(&len) {
+        return false;
+    }
+    if word.chars().any(|c| ('\u{0E00}'..='\u{0E7F}').contains(&c)) {
+        return eligible_thai(word);
     }
     if !word.chars().all(|c| c.is_ascii_alphabetic() || c == '-' || c == '\'') {
         return false;
@@ -371,6 +401,21 @@ mod tests {
         let mut words = Words::default();
         assert!(words.keep_as_typed("Suvasin"));
         assert!(words.protects("Suvasin"));
+        assert!(words.keep_as_typed("ok"), "two letters, but the typist said so");
+        assert!(words.keep_as_typed("\u{0e2d}\u{0e2d}\u{0e01}"));
+    }
+
+    #[test]
+    fn junk_a_stuck_key_leaves_behind_is_not_kept() {
+        // the first version of this feature remembered this one; a `]` and a `'`
+        // are keys, not letters
+        let mut words = Words::default();
+        assert!(!words.keep_as_typed("vvdde]y'"));
+        assert!(!words.keep_as_typed("MyClass"));
+        assert!(!words.keep_as_typed("ALL CAPS"));
+        assert!(!words.keep_as_typed("a"));
+        assert!(!words.keep_as_typed(""));
+        assert_eq!(words.words().count(), 0);
     }
 
     #[test]
